@@ -3,6 +3,7 @@ import { useLove } from "./LoveContext";
 import HeartMakerPage from "./pages/HeartMakerPage";
 import HomePage from "./pages/HomePage";
 import IntroPage from "./pages/IntroPage";
+import MemoryAdminPage from "./pages/MemoryAdminPage";
 import MemoriesPage from "./pages/MemoriesPage";
 import MessagesPage from "./pages/MessagesPage";
 
@@ -25,6 +26,7 @@ function SiteLayout() {
           <NavLink to="/memories">Memories</NavLink>
           <NavLink to="/messages">Messages</NavLink>
           <NavLink to="/heart-maker">Heart Maker</NavLink>
+          <NavLink to="/memory-admin">Admin</NavLink>
         </nav>
       </header>
 
@@ -44,6 +46,7 @@ function App() {
         <Route path="/memories" element={<MemoriesPage />} />
         <Route path="/messages" element={<MessagesPage />} />
         <Route path="/heart-maker" element={<HeartMakerPage />} />
+        <Route path="/memory-admin" element={<MemoryAdminPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
