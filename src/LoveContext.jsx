@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const LoveContext = createContext(null);
+const STORAGE_KEY = "love-names-v2";
+const LEGACY_STORAGE_KEY = "love-names";
 
 function readStoredNames() {
   const defaultNames = {
@@ -13,7 +15,7 @@ function readStoredNames() {
   }
 
   try {
-    const rawValue = window.localStorage.getItem("love-names");
+    const rawValue = window.localStorage.getItem(STORAGE_KEY);
 
     if (!rawValue) {
       return defaultNames;
@@ -44,8 +46,13 @@ export function LoveProvider({ children }) {
   const [names, setNames] = useState(readStoredNames);
 
   useEffect(() => {
-    window.localStorage.setItem("love-names", JSON.stringify(names));
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(names));
   }, [names]);
+
+  useEffect(() => {
+    // Drop the legacy key so previously saved demo names cannot come back.
+    window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+  }, []);
 
   const value = useMemo(
     () => ({
