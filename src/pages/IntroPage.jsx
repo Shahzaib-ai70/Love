@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import FloatingHearts from "../FloatingHearts";
 import HeartCanvas from "../HeartCanvas";
 import { useLove } from "../LoveContext";
 
@@ -27,6 +28,7 @@ function IntroPage() {
 
   return (
     <div className="page-shell">
+      <FloatingHearts />
       <div className="glow glow-one" />
       <div className="glow glow-two" />
 

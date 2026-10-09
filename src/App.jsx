@@ -1,4 +1,5 @@
 import { NavLink, Navigate, Outlet, Route, Routes } from "react-router-dom";
+import FloatingHearts from "./FloatingHearts";
 import { useLove } from "./LoveContext";
 import HeartMakerPage from "./pages/HeartMakerPage";
 import HomePage from "./pages/HomePage";
@@ -12,6 +13,7 @@ function SiteLayout() {
 
   return (
     <div className="page-shell">
+      <FloatingHearts />
       <div className="glow glow-one" />
       <div className="glow glow-two" />
 

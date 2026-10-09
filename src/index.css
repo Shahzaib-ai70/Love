@@ -1,7 +1,7 @@
 :root {
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #fff4f7;
-  background: #180014;
+  color: #fff6fa;
+  background: #54206d;
   line-height: 1.5;
   font-weight: 400;
   font-synthesis: none;
@@ -23,8 +23,10 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top, rgba(255, 86, 146, 0.24), transparent 32%),
-    linear-gradient(180deg, #24001b 0%, #12000d 100%);
+    radial-gradient(circle at 18% 20%, rgba(255, 174, 214, 0.45), transparent 22%),
+    radial-gradient(circle at 78% 14%, rgba(255, 203, 229, 0.28), transparent 20%),
+    radial-gradient(circle at 50% 56%, rgba(255, 61, 152, 0.3), transparent 26%),
+    linear-gradient(180deg, #7b2ca2 0%, #6f1577 48%, #5c0b61 100%);
 }
 
 #root {
@@ -48,10 +50,62 @@ input {
   overflow: hidden;
 }
 
+.heart-overlay,
 .intro-page,
 .content,
 .site-header {
   z-index: 1;
+}
+
+.heart-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.floating-heart,
+.floating-heart::before,
+.floating-heart::after {
+  position: absolute;
+  display: block;
+  content: "";
+}
+
+.floating-heart {
+  opacity: 0.2;
+  transform: rotate(-45deg);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255, 64, 160, 0.85), rgba(255, 125, 185, 0.5));
+  filter: blur(0.2px);
+  animation: floatHeart ease-in-out infinite;
+}
+
+.floating-heart::before,
+.floating-heart::after {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: inherit;
+}
+
+.floating-heart::before {
+  top: -50%;
+  left: 0;
+}
+
+.floating-heart::after {
+  top: 0;
+  left: 50%;
+}
+
+.floating-sparkle {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 220, 102, 0.9);
+  box-shadow: 0 0 18px rgba(255, 211, 90, 0.75);
+  animation: pulseSparkle 5s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .glow {
@@ -67,19 +121,19 @@ input {
 .glow-one {
   top: -80px;
   left: -100px;
-  background: rgba(255, 77, 136, 0.75);
+  background: rgba(255, 161, 204, 0.85);
 }
 
 .glow-two {
   right: -120px;
   top: 240px;
-  background: rgba(168, 86, 255, 0.55);
+  background: rgba(255, 122, 181, 0.55);
 }
 
 .eyebrow,
 .section-tag {
   margin: 0 0 12px;
-  color: #ffb4cf;
+  color: #ffe0ee;
   text-transform: uppercase;
   letter-spacing: 0.18em;
   font-size: 0.78rem;
@@ -92,7 +146,7 @@ input {
 .copy-status,
 .input-help,
 .intro-note {
-  color: #ffd9e6;
+  color: #fff0f7;
 }
 
 .primary-button,
@@ -116,9 +170,9 @@ input {
 }
 
 .secondary-button {
-  color: #fff4f7;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff8fb;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.22);
 }
 
 .primary-button:hover,
@@ -145,9 +199,9 @@ input {
 .message-card,
 .section-block,
 .site-header {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.06);
-  box-shadow: 0 24px 60px rgba(17, 0, 12, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 244, 249, 0.12);
+  box-shadow: 0 24px 60px rgba(91, 14, 86, 0.22);
   backdrop-filter: blur(18px);
 }
 
@@ -180,17 +234,17 @@ input {
 .input-panel label {
   display: grid;
   gap: 10px;
-  color: #fff4f7;
+  color: #fff9fb;
 }
 
 .intro-form input,
 .input-panel input {
   width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 18px;
   padding: 14px 16px;
-  color: #fff4f7;
-  background: rgba(255, 255, 255, 0.08);
+  color: #fff8fb;
+  background: rgba(255, 255, 255, 0.14);
   outline: none;
 }
 
@@ -219,13 +273,13 @@ input {
   border-radius: 30px;
   overflow: hidden;
   background:
-    radial-gradient(circle at top, rgba(255, 115, 180, 0.18), transparent 34%),
-    radial-gradient(circle at bottom, rgba(255, 72, 144, 0.1), transparent 30%),
-    rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 127, 185, 0.16);
+    radial-gradient(circle at top, rgba(255, 181, 216, 0.3), transparent 34%),
+    radial-gradient(circle at bottom, rgba(255, 133, 189, 0.18), transparent 30%),
+    rgba(92, 0, 88, 0.22);
+  border: 1px solid rgba(255, 215, 232, 0.2);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 30px 70px rgba(0, 0, 0, 0.28);
+    0 30px 70px rgba(79, 0, 57, 0.22);
 }
 
 .intro-heart-stage {
@@ -257,9 +311,9 @@ input {
   padding: 22px 26px;
   text-align: center;
   border-radius: 24px;
-  background: rgba(6, 14, 12, 0.32);
+  background: rgba(96, 13, 81, 0.3);
   backdrop-filter: blur(10px);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 20px 40px rgba(110, 17, 80, 0.18);
 }
 
 .intro-heart-text {
@@ -312,14 +366,14 @@ input {
   padding: 10px 16px;
   border-radius: 999px;
   color: #ffe7ef;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.14);
   border: 1px solid transparent;
   transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
 }
 
 .site-nav a.active {
-  background: rgba(255, 96, 148, 0.18);
-  border-color: rgba(255, 159, 194, 0.2);
+  background: rgba(255, 173, 206, 0.24);
+  border-color: rgba(255, 221, 235, 0.25);
 }
 
 .content {
@@ -400,9 +454,9 @@ input {
 
 .memory-letter-card,
 .generated-message-card {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.06);
-  box-shadow: 0 24px 60px rgba(17, 0, 12, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 246, 251, 0.12);
+  box-shadow: 0 24px 60px rgba(91, 14, 86, 0.2);
   backdrop-filter: blur(18px);
 }
 
@@ -425,9 +479,9 @@ input {
 
 .gallery-card {
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.06);
-  box-shadow: 0 24px 60px rgba(17, 0, 12, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 246, 251, 0.12);
+  box-shadow: 0 24px 60px rgba(91, 14, 86, 0.2);
   backdrop-filter: blur(18px);
   padding: 0;
 }
@@ -461,11 +515,11 @@ input {
 .message-search input,
 .message-search textarea {
   width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 18px;
   padding: 14px 16px;
   color: #fff4f7;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.14);
   outline: none;
   resize: vertical;
 }
@@ -511,9 +565,9 @@ input {
 
 .vault-auth-card,
 .vault-toolbar {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.06);
-  box-shadow: 0 24px 60px rgba(17, 0, 12, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 246, 251, 0.12);
+  box-shadow: 0 24px 60px rgba(91, 14, 86, 0.2);
   backdrop-filter: blur(18px);
   border-radius: 28px;
   padding: 24px;
@@ -567,12 +621,38 @@ input {
 .vault-form input,
 .vault-form textarea {
   width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 18px;
   padding: 14px 16px;
   color: #fff4f7;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.14);
   outline: none;
+}
+
+@keyframes floatHeart {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-45deg) scale(1);
+    opacity: 0.14;
+  }
+
+  50% {
+    transform: translateY(-14px) rotate(-45deg) scale(1.08);
+    opacity: 0.28;
+  }
+}
+
+@keyframes pulseSparkle {
+  0%,
+  100% {
+    transform: scale(0.85);
+    opacity: 0.45;
+  }
+
+  50% {
+    transform: scale(1.3);
+    opacity: 1;
+  }
 }
 
 .vault-form input:focus,
