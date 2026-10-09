@@ -4,8 +4,8 @@ const LoveContext = createContext(null);
 
 function readStoredNames() {
   const defaultNames = {
-    yourName: "Ayaan",
-    loverName: "Mahi",
+    yourName: "",
+    loverName: "",
   };
 
   if (typeof window === "undefined") {
@@ -21,9 +21,18 @@ function readStoredNames() {
 
     const parsedValue = JSON.parse(rawValue);
 
+    const storedYourName = typeof parsedValue.yourName === "string" ? parsedValue.yourName : "";
+    const storedLoverName =
+      typeof parsedValue.loverName === "string" ? parsedValue.loverName : "";
+
+    // Remove the old demo names if they were previously saved.
+    if (storedYourName === "Ayaan" && storedLoverName === "Mahi") {
+      return defaultNames;
+    }
+
     return {
-      yourName: parsedValue.yourName || defaultNames.yourName,
-      loverName: parsedValue.loverName || defaultNames.loverName,
+      yourName: storedYourName,
+      loverName: storedLoverName,
     };
   } catch (error) {
     console.error("Could not read love names", error);

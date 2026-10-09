@@ -18,8 +18,8 @@ function IntroPage() {
     event.preventDefault();
 
     setNames({
-      yourName: localYourName || "Your Name",
-      loverName: localLoverName || "Lover Name",
+      yourName: localYourName.trim(),
+      loverName: localLoverName.trim(),
     });
 
     navigate("/home");
