@@ -31,29 +31,30 @@ This creates the production files inside `dist/`.
 
 ## 4. Publish Build Files
 
+For the existing `testingpro.site` VPS, the active Nginx configuration uses
+`/var/www/testingpro.site/app` as its web root. Copying files to
+`/var/www/love-memories` will not update that site.
+
 ```bash
-sudo mkdir -p /var/www/love-memories
-sudo cp -r dist/* /var/www/love-memories/
+sudo mkdir -p /var/www/testingpro.site/app
+sudo cp -a dist/. /var/www/testingpro.site/app/
 ```
 
 ## 5. Configure Nginx
 
 - Open `deploy/nginx-love-memories.conf`
 - Replace `yourdomain.com` with your real domain
-- If needed, keep the root as `/var/www/love-memories/dist` only if you copy the whole `dist` folder there
-- If you copy the inside contents of `dist` into `/var/www/love-memories`, then change:
+- For a new site, configure `root` to match the directory where you publish the
+  contents of `dist/`.
+- For the existing `testingpro.site` VPS, keep its configured root at
+  `/var/www/testingpro.site/app`; do not replace its active site configuration
+  with the example config.
 
 ```nginx
-root /var/www/love-memories;
+root /var/www/testingpro.site/app;
 ```
 
-Recommended if you used the copy command in step 4:
-
-```nginx
-root /var/www/love-memories;
-```
-
-Then install the config:
+For a new site only, install and enable the Nginx config:
 
 ```bash
 sudo cp deploy/nginx-love-memories.conf /etc/nginx/sites-available/love-memories
@@ -99,8 +100,8 @@ cd /var/www/love-memories-source
 git pull --ff-only origin main
 npm ci
 npm run build
-sudo mkdir -p /var/www/love-memories
-sudo cp -a dist/. /var/www/love-memories/
+sudo mkdir -p /var/www/testingpro.site/app
+sudo cp -a dist/. /var/www/testingpro.site/app/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
@@ -108,13 +109,13 @@ Confirm that Nginx serves the build you just copied:
 
 ```bash
 grep -oE 'assets/[^"]+' dist/index.html
-grep -oE 'assets/[^"]+' /var/www/love-memories/index.html
-curl -fsS https://yourdomain.com/ | grep -oE 'assets/[^"]+'
+grep -oE 'assets/[^"]+' /var/www/testingpro.site/app/index.html
+curl -fsS https://testingpro.site/ | grep -oE 'assets/[^"]+'
 ```
 
 The three commands should show the same JavaScript and CSS asset names. If they
 differ, inspect the active Nginx configuration and make sure its `root` for
-your domain is `/var/www/love-memories`:
+`testingpro.site` is `/var/www/testingpro.site/app`:
 
 ```bash
 sudo nginx -T 2>/dev/null | grep -nE 'server_name|root '
