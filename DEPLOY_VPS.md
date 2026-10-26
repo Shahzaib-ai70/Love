@@ -96,9 +96,26 @@ Whenever you change the website:
 
 ```bash
 cd /var/www/love-memories-source
-npm install
+git pull --ff-only origin main
+npm ci
 npm run build
-sudo rm -rf /var/www/love-memories/*
-sudo cp -r dist/* /var/www/love-memories/
-sudo systemctl reload nginx
+sudo mkdir -p /var/www/love-memories
+sudo cp -a dist/. /var/www/love-memories/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Confirm that Nginx serves the build you just copied:
+
+```bash
+grep -oE 'assets/[^"]+' dist/index.html
+grep -oE 'assets/[^"]+' /var/www/love-memories/index.html
+curl -fsS https://yourdomain.com/ | grep -oE 'assets/[^"]+'
+```
+
+The three commands should show the same JavaScript and CSS asset names. If they
+differ, inspect the active Nginx configuration and make sure its `root` for
+your domain is `/var/www/love-memories`:
+
+```bash
+sudo nginx -T 2>/dev/null | grep -nE 'server_name|root '
 ```

@@ -1144,3 +1144,494 @@ input {
     transition: none;
   }
 }
+
+:root {
+  color: #fff7fa;
+  background: #1a0b19;
+}
+
+body {
+  background:
+    radial-gradient(ellipse at 12% 8%, rgba(185, 74, 133, 0.28), transparent 34%),
+    radial-gradient(ellipse at 88% 18%, rgba(117, 47, 133, 0.3), transparent 32%),
+    radial-gradient(ellipse at 48% 90%, rgba(135, 28, 91, 0.24), transparent 40%),
+    linear-gradient(145deg, #1a0b19 0%, #29102b 52%, #170b1d 100%);
+  background-attachment: fixed;
+}
+
+.page-shell {
+  isolation: isolate;
+}
+
+.heart-overlay {
+  opacity: 0.48;
+}
+
+.glow-one {
+  background: rgba(255, 130, 180, 0.42);
+}
+
+.glow-two {
+  background: rgba(183, 87, 199, 0.38);
+}
+
+.site-header {
+  max-width: 1120px;
+  border-color: rgba(255, 235, 244, 0.12);
+  border-radius: 22px;
+  background: rgba(29, 13, 31, 0.72);
+  box-shadow:
+    0 20px 60px rgba(8, 3, 12, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(24px);
+}
+
+.site-header .eyebrow {
+  margin-bottom: 4px;
+  color: #eab7d0;
+  font-size: 0.68rem;
+}
+
+.site-header h2 {
+  font-size: 1.2rem;
+  letter-spacing: -0.025em;
+}
+
+.site-nav {
+  gap: 7px;
+}
+
+.site-nav a {
+  padding: 9px 14px;
+  color: rgba(255, 241, 248, 0.78);
+  background: rgba(255, 255, 255, 0.045);
+  border-color: rgba(255, 255, 255, 0.035);
+  font-size: 0.86rem;
+}
+
+.site-nav a:hover,
+.site-nav a.active {
+  color: #fff8fb;
+  border-color: rgba(255, 170, 204, 0.24);
+  background: rgba(255, 133, 181, 0.16);
+}
+
+.content {
+  max-width: 1120px;
+  padding-top: 34px;
+}
+
+.intro-page {
+  max-width: 1180px;
+  gap: clamp(24px, 5vw, 64px);
+  padding-top: 54px;
+  padding-bottom: 54px;
+}
+
+.intro-copy,
+.intro-animation-card {
+  border-color: rgba(255, 235, 244, 0.14);
+  background: linear-gradient(145deg, rgba(57, 28, 57, 0.84), rgba(34, 16, 39, 0.78));
+  box-shadow:
+    0 30px 90px rgba(8, 3, 12, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.intro-copy {
+  padding: clamp(28px, 4vw, 44px);
+}
+
+.intro-copy .eyebrow,
+.section-tag {
+  color: #efb6d0;
+}
+
+.intro-copy h1 {
+  font-size: clamp(2.8rem, 5vw, 4.3rem);
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+}
+
+.hero-copy,
+.copy-status,
+.memory-letter-card p,
+.gallery-copy p {
+  color: rgba(255, 238, 246, 0.72);
+  line-height: 1.75;
+}
+
+.intro-form label,
+.input-panel label,
+.message-search,
+.vault-form label {
+  color: rgba(255, 240, 247, 0.86);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.intro-form input,
+.input-panel input,
+.message-search input,
+.message-search textarea,
+.vault-form input,
+.vault-form textarea {
+  border-color: rgba(255, 233, 243, 0.15);
+  border-radius: 14px;
+  color: #fff8fb;
+  background: rgba(15, 8, 19, 0.42);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.intro-form input::placeholder,
+.input-panel input::placeholder,
+.message-search input::placeholder,
+.message-search textarea::placeholder,
+.vault-form input::placeholder,
+.vault-form textarea::placeholder {
+  color: rgba(255, 230, 241, 0.42);
+}
+
+.intro-form input:focus,
+.input-panel input:focus,
+.message-search input:focus,
+.message-search textarea:focus,
+.vault-form input:focus,
+.vault-form textarea:focus {
+  border-color: rgba(255, 139, 184, 0.72);
+  background: rgba(15, 8, 19, 0.62);
+  box-shadow: 0 0 0 4px rgba(255, 122, 174, 0.12);
+}
+
+.primary-button,
+.message-card button,
+.generated-message-card button {
+  min-height: 48px;
+  border: 1px solid rgba(255, 227, 238, 0.22);
+  color: #3c1530;
+  background: linear-gradient(135deg, #ffd5e5, #ff9bc3);
+  box-shadow: 0 12px 28px rgba(214, 73, 134, 0.2);
+  font-weight: 750;
+}
+
+.primary-button:hover,
+.message-card button:hover,
+.generated-message-card button:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(135deg, #ffe8f0, #ffb6d1);
+  box-shadow: 0 16px 34px rgba(214, 73, 134, 0.28);
+}
+
+.secondary-button {
+  color: #ffe9f2;
+  border-color: rgba(255, 233, 243, 0.16);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.intro-animation-card {
+  min-height: 620px;
+}
+
+.intro-heart-stage,
+.heart-preview {
+  border-color: rgba(255, 227, 239, 0.14);
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(255, 105, 166, 0.16), transparent 40%),
+    linear-gradient(150deg, rgba(24, 9, 28, 0.76), rgba(53, 17, 53, 0.56));
+}
+
+.heart-text {
+  border: 1px solid rgba(255, 230, 241, 0.12);
+  background: rgba(35, 13, 38, 0.64);
+}
+
+.heart-text span {
+  color: #f4bdd4;
+}
+
+.section-block {
+  padding: 18px 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.section-heading {
+  max-width: 760px;
+  margin-bottom: 30px;
+}
+
+.section-heading h2 {
+  font-size: clamp(2rem, 4.4vw, 3.3rem);
+  letter-spacing: -0.05em;
+  line-height: 1.05;
+  text-wrap: balance;
+}
+
+.section-heading .copy-status {
+  max-width: 650px;
+  margin-top: 12px;
+}
+
+.message-tools,
+.message-search-wide {
+  max-width: 780px;
+}
+
+.message-tools {
+  justify-content: flex-start;
+  align-items: end;
+  padding: 22px;
+  border: 1px solid rgba(255, 232, 243, 0.12);
+  border-radius: 22px;
+  background: rgba(36, 17, 39, 0.68);
+}
+
+.message-tools .message-search {
+  flex: 1 1 380px;
+}
+
+.generated-message-card,
+.vault-auth-card,
+.vault-toolbar,
+.memory-letter-card,
+.gallery-card,
+.vault-memory-card {
+  border-color: rgba(255, 231, 241, 0.13);
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(57, 29, 58, 0.82), rgba(34, 17, 40, 0.78));
+  box-shadow:
+    0 22px 58px rgba(7, 3, 12, 0.19),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  backdrop-filter: blur(18px);
+}
+
+.generated-message-card {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(24px, 4vw, 38px);
+}
+
+.generated-message-card::after {
+  position: absolute;
+  top: -90px;
+  right: -65px;
+  width: 230px;
+  height: 230px;
+  border: 1px solid rgba(255, 185, 213, 0.1);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+}
+
+.generated-message-card h3,
+.memory-letter-card h3 {
+  font-size: 1.3rem;
+  letter-spacing: -0.025em;
+}
+
+.generated-message-card > p:not(.section-tag) {
+  max-width: 820px;
+  color: rgba(255, 243, 248, 0.9);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.15rem, 2.1vw, 1.55rem);
+  line-height: 1.75;
+}
+
+.message-count {
+  color: rgba(255, 228, 239, 0.66);
+  font-size: 0.88rem;
+}
+
+.message-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.message-card {
+  min-height: 190px;
+  padding: 22px;
+  border-color: rgba(255, 231, 241, 0.11);
+  border-radius: 20px;
+  background: rgba(42, 21, 45, 0.7);
+  box-shadow: 0 16px 38px rgba(7, 3, 12, 0.14);
+}
+
+.message-card p {
+  color: rgba(255, 243, 248, 0.85);
+  line-height: 1.75;
+}
+
+.vault-auth-layout {
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+  align-items: stretch;
+}
+
+.vault-auth-card,
+.memory-letter-card,
+.vault-toolbar {
+  padding: clamp(22px, 3vw, 32px);
+}
+
+.vault-switcher {
+  border: 1px solid rgba(255, 232, 243, 0.08);
+  background: rgba(10, 5, 13, 0.28);
+}
+
+.vault-switcher button {
+  color: rgba(255, 232, 242, 0.7);
+}
+
+.vault-switcher .is-active {
+  color: #fff8fb;
+  background: rgba(255, 133, 181, 0.2);
+}
+
+.vault-form input[type="file"] {
+  padding: 9px;
+}
+
+.vault-form input[type="file"]::file-selector-button {
+  margin-right: 12px;
+  padding: 9px 13px;
+  border: 0;
+  border-radius: 10px;
+  color: #421b37;
+  background: #ffd6e6;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.vault-memory-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.gallery-card,
+.vault-memory-card {
+  overflow: hidden;
+  padding: 0;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.gallery-card:hover,
+.vault-memory-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(255, 184, 213, 0.28);
+}
+
+.gallery-copy {
+  padding: 22px;
+}
+
+.gallery-copy h3 {
+  margin: 0 0 10px;
+  font-size: 1.2rem;
+}
+
+.heart-maker-page .section-heading {
+  margin-bottom: 24px;
+}
+
+.heart-layout {
+  grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1.28fr);
+  gap: 22px;
+}
+
+.input-panel {
+  align-self: stretch;
+  align-content: center;
+  padding: clamp(22px, 3vw, 32px);
+  border: 1px solid rgba(255, 231, 241, 0.13);
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(57, 29, 58, 0.82), rgba(34, 17, 40, 0.78));
+  box-shadow: 0 22px 58px rgba(7, 3, 12, 0.19);
+}
+
+.input-help {
+  margin: 0;
+  color: rgba(255, 233, 243, 0.62);
+  font-size: 0.88rem;
+  line-height: 1.65;
+}
+
+.heart-preview {
+  min-height: 470px;
+  border-radius: 24px;
+}
+
+.home-hero-art {
+  border-color: rgba(255, 231, 241, 0.13);
+  background:
+    radial-gradient(ellipse at 50% 43%, rgba(255, 126, 177, 0.2), transparent 43%),
+    linear-gradient(145deg, rgba(57, 29, 58, 0.84), rgba(27, 13, 34, 0.9));
+}
+
+.home-feature-card {
+  border-color: rgba(255, 231, 241, 0.12);
+  background: linear-gradient(145deg, rgba(57, 29, 58, 0.78), rgba(34, 17, 40, 0.68));
+}
+
+.home-feature-card:hover {
+  border-color: rgba(255, 184, 213, 0.27);
+}
+
+@media (max-width: 760px) {
+  .site-header {
+    position: relative;
+    top: auto;
+    align-items: stretch;
+    margin: 12px 14px 0;
+    padding: 18px;
+  }
+
+  .site-nav {
+    width: 100%;
+    gap: 6px;
+  }
+
+  .site-nav a {
+    flex: 1 1 auto;
+    padding: 9px 10px;
+    text-align: center;
+  }
+
+  .content {
+    padding-top: 22px;
+  }
+
+  .intro-page {
+    grid-template-columns: minmax(0, 1fr);
+    padding-top: 24px;
+  }
+
+  .intro-animation-card {
+    min-height: 480px;
+  }
+
+  .intro-heart-stage {
+    min-height: 430px;
+  }
+
+  .heart-layout,
+  .vault-auth-layout,
+  .message-list,
+  .vault-memory-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .heart-preview {
+    min-height: 380px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
