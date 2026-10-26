@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import {
   createVaultAccount,
   deleteUserMemory,
+  getMemoryStorageMode,
   getCurrentVaultUser,
   getUserMemories,
   saveUserMemory,
   signInVaultAccount,
   signOutVaultAccount,
-} from "../localMemoryVault";
+} from "../memoryVaultApi";
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -31,9 +32,12 @@ function isDirectVideoUrl(url) {
 }
 
 function MemoriesPage() {
+  const isCloudMode = getMemoryStorageMode() === "cloud";
+  const maxUploadSizeMb = isCloudMode ? 15 : 2.5;
   const [mode, setMode] = useState("signin");
   const [currentUser, setCurrentUser] = useState(null);
   const [memories, setMemories] = useState([]);
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [authError, setAuthError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState("");
@@ -54,38 +58,56 @@ function MemoriesPage() {
     mediaData: "",
   });
 
-  const loadCurrentUser = () => {
-    const user = getCurrentVaultUser();
-    setCurrentUser(user);
-    setMemories(user ? getUserMemories(user.id) : []);
+  const loadCurrentUser = async () => {
+    setIsLoadingUser(true);
+
+    try {
+      const user = await getCurrentVaultUser();
+      setCurrentUser(user);
+      setMemories(user ? await getUserMemories(user.id) : []);
+    } catch (error) {
+      setCurrentUser(null);
+      setMemories([]);
+      setAuthError(error instanceof Error ? error.message : "Could not load your memory account.");
+    } finally {
+      setIsLoadingUser(false);
+    }
   };
 
   useEffect(() => {
-    loadCurrentUser();
+    void loadCurrentUser();
   }, []);
 
   const memoryCountLabel = useMemo(() => {
-    if (!currentUser) {
-      return "Create a private account or sign in to open your memories.";
+    if (isLoadingUser) {
+      return "Loading your private memory vault.";
     }
 
-    return `${memories.length} private memories saved for ${currentUser.displayName || currentUser.username}.`;
-  }, [currentUser, memories.length]);
+    if (!currentUser) {
+      return isCloudMode
+        ? "Create a private account or sign in to save memories permanently."
+        : "Create a private account or sign in to open your memories.";
+    }
 
-  const handleSignIn = (event) => {
+    return `${memories.length} private memories saved for ${
+      currentUser.displayName || currentUser.username
+    }.`;
+  }, [currentUser, isCloudMode, isLoadingUser, memories.length]);
+
+  const handleSignIn = async (event) => {
     event.preventDefault();
     setAuthError("");
 
     try {
-      signInVaultAccount(signInForm);
+      await signInVaultAccount(signInForm);
       setSignInForm({ username: "", password: "" });
-      loadCurrentUser();
+      await loadCurrentUser();
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Could not sign in.");
     }
   };
 
-  const handleSignUp = (event) => {
+  const handleSignUp = async (event) => {
     event.preventDefault();
     setAuthError("");
 
@@ -100,14 +122,14 @@ function MemoriesPage() {
     }
 
     try {
-      createVaultAccount(signUpForm);
+      await createVaultAccount(signUpForm);
       setSignUpForm({
         displayName: "",
         username: "",
         password: "",
         confirmPassword: "",
       });
-      loadCurrentUser();
+      await loadCurrentUser();
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Could not create account.");
     }
@@ -120,8 +142,12 @@ function MemoriesPage() {
       return;
     }
 
-    if (file.size > 2.5 * 1024 * 1024) {
-      setSaveError("For browser local storage, keep files under 2.5 MB.");
+    if (file.size > maxUploadSizeMb * 1024 * 1024) {
+      setSaveError(
+        isCloudMode
+          ? `Keep uploads under ${maxUploadSizeMb} MB for fast cloud saving.`
+          : `For browser local storage, keep files under ${maxUploadSizeMb} MB.`
+      );
       event.target.value = "";
       return;
     }
@@ -174,7 +200,7 @@ function MemoriesPage() {
           ? memoryForm.mediaType
           : "text";
 
-      saveUserMemory({
+      await saveUserMemory({
         userId: currentUser.id,
         title: memoryForm.title.trim(),
         text: memoryForm.text.trim(),
@@ -192,8 +218,12 @@ function MemoriesPage() {
         mediaType: "text",
         mediaData: "",
       });
-      setSaveSuccess("Memory saved in this browser vault.");
-      loadCurrentUser();
+      setSaveSuccess(
+        isCloudMode
+          ? "Memory saved permanently in your cloud vault."
+          : "Memory saved in this browser vault."
+      );
+      await loadCurrentUser();
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "Could not save this memory.");
     } finally {
@@ -201,16 +231,20 @@ function MemoriesPage() {
     }
   };
 
-  const handleDeleteMemory = (memoryId) => {
-    deleteUserMemory(memoryId);
-    loadCurrentUser();
+  const handleDeleteMemory = async (memoryId) => {
+    try {
+      await deleteUserMemory(memoryId);
+      await loadCurrentUser();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Could not delete this memory.");
+    }
   };
 
-  const handleLogout = () => {
-    signOutVaultAccount();
+  const handleLogout = async () => {
+    await signOutVaultAccount();
     setSaveSuccess("");
     setSaveError("");
-    loadCurrentUser();
+    await loadCurrentUser();
   };
 
   return (
@@ -219,12 +253,18 @@ function MemoriesPage() {
         <p className="section-tag">Private memories</p>
         <h2>Save your own memory vault</h2>
         <p className="copy-status">
-          {memoryCountLabel} This version is browser-local, so each browser keeps its
-          own accounts, passwords, and memories.
+          {memoryCountLabel}{" "}
+          {isCloudMode
+            ? "Cloud mode is active, so accounts and memories save in Supabase."
+            : "Local mode is active, so this browser keeps its own accounts, passwords, and memories until Supabase keys are added."}
         </p>
       </div>
 
-      {!currentUser ? (
+      {isLoadingUser ? (
+        <article className="memory-letter-card">
+          <p>Loading your memory vault...</p>
+        </article>
+      ) : !currentUser ? (
         <div className="vault-auth-layout">
           <article className="vault-auth-card">
             <div className="vault-switcher">
@@ -348,16 +388,21 @@ function MemoriesPage() {
               </form>
             )}
 
-            <p className="copy-status">{authError || "Each browser keeps its own private memory login."}</p>
+            <p className="copy-status">
+              {authError ||
+                (isCloudMode
+                  ? "Cloud account mode is ready. New memories can save permanently after Supabase setup."
+                  : "Each browser keeps its own private memory login.")}
+            </p>
           </article>
 
           <article className="memory-letter-card">
             <p className="section-tag">How it works</p>
             <h3>Private vault access</h3>
             <p>
-              When someone opens the Memories page, they first create an account or
-              sign in with a password. After that, they can save text messages,
-              images, and short videos in their own private browser vault.
+              {isCloudMode
+                ? "When someone creates an account here, their login and memories can sync through Supabase instead of staying on one device."
+                : "When someone opens the Memories page, they first create an account or sign in with a password. After that, they can save text messages, images, and short videos in their own private browser vault."}
             </p>
           </article>
         </div>
@@ -431,8 +476,10 @@ function MemoriesPage() {
               </label>
 
               <p className="copy-status">
-                Local browser storage has limited space, so keep uploads small. Selected
-                file: {memoryForm.mediaFileName || "none"}
+                {isCloudMode
+                  ? `Files can upload to cloud storage. Keep them under ${maxUploadSizeMb} MB for smooth saving.`
+                  : "Local browser storage has limited space, so keep uploads small."}{" "}
+                Selected file: {memoryForm.mediaFileName || "none"}
               </p>
 
               <button className="primary-button" type="submit" disabled={isSaving}>
@@ -440,7 +487,13 @@ function MemoriesPage() {
               </button>
             </form>
 
-            <p className="copy-status">{saveError || saveSuccess || "Saved memories stay in this browser."}</p>
+            <p className="copy-status">
+              {saveError ||
+                saveSuccess ||
+                (isCloudMode
+                  ? "Saved memories stay in your cloud vault."
+                  : "Saved memories stay in this browser.")}
+            </p>
           </article>
 
           <div className="section-heading">
