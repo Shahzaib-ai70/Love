@@ -1,6 +1,7 @@
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.replace(/\/+$/, "") || "";
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 const SESSION_KEY = "love-supabase-session-v1";
+let sessionRefreshPromise = null;
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
@@ -38,8 +39,57 @@ export function clearSupabaseSession() {
   window.localStorage.removeItem(SESSION_KEY);
 }
 
-export function getSupabasePublicFileUrl(bucketName, filePath) {
-  return `${supabaseUrl}/storage/v1/object/public/${bucketName}/${filePath}`;
+async function refreshSupabaseSession(session) {
+  if (!session?.refresh_token) {
+    clearSupabaseSession();
+    return null;
+  }
+
+  if (!sessionRefreshPromise) {
+    sessionRefreshPromise = supabaseRequest("/auth/v1/token?grant_type=refresh_token", {
+      method: "POST",
+      body: {
+        refresh_token: session.refresh_token,
+      },
+    })
+      .then((refreshedSession) => {
+        saveSupabaseSession(refreshedSession);
+        return refreshedSession;
+      })
+      .catch((error) => {
+        if (error instanceof Error && /invalid grant|refresh token/i.test(error.message)) {
+          clearSupabaseSession();
+        }
+
+        throw error;
+      })
+      .finally(() => {
+        sessionRefreshPromise = null;
+      });
+  }
+
+  return sessionRefreshPromise;
+}
+
+export async function getSupabaseSignedFileUrl(bucketName, filePath, accessToken) {
+  const encodedPath = filePath.split("/").map(encodeURIComponent).join("/");
+  const payload = await supabaseRequest(
+    `/storage/v1/object/sign/${bucketName}/${encodedPath}`,
+    {
+      method: "POST",
+      accessToken,
+      body: { expiresIn: 3600 },
+    }
+  );
+  const signedUrl = payload.signedURL || payload.signedUrl;
+
+  if (!signedUrl) {
+    throw new Error("Supabase did not return a signed media URL.");
+  }
+
+  return signedUrl.startsWith("http")
+    ? signedUrl
+    : `${supabaseUrl}/storage/v1${signedUrl.startsWith("/") ? signedUrl : `/${signedUrl}`}`;
 }
 
 export async function supabaseRequest(
@@ -139,10 +189,27 @@ export async function getSupabaseUser() {
       accessToken: session.access_token,
     });
   } catch (error) {
-    clearSupabaseSession();
-
     if (error instanceof Error && /jwt|token|expired|invalid/i.test(error.message)) {
-      return null;
+      try {
+        const refreshedSession = await refreshSupabaseSession(session);
+
+        if (!refreshedSession?.access_token) {
+          return null;
+        }
+
+        return await supabaseRequest("/auth/v1/user", {
+          accessToken: refreshedSession.access_token,
+        });
+      } catch (refreshError) {
+        if (
+          refreshError instanceof Error &&
+          /invalid grant|refresh token/i.test(refreshError.message)
+        ) {
+          return null;
+        }
+
+        throw refreshError;
+      }
     }
 
     throw error;

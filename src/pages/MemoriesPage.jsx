@@ -5,6 +5,7 @@ import {
   getMemoryStorageMode,
   getCurrentVaultUser,
   getUserMemories,
+  importLocalMemories,
   saveUserMemory,
   signInVaultAccount,
   signOutVaultAccount,
@@ -42,6 +43,7 @@ function MemoriesPage() {
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [signInForm, setSignInForm] = useState({ username: "", password: "" });
   const [signUpForm, setSignUpForm] = useState({
     displayName: "",
@@ -116,8 +118,17 @@ function MemoriesPage() {
       return;
     }
 
-    if (signUpForm.password.length < 4) {
-      setAuthError("Use a password with at least 4 characters.");
+    if (signUpForm.password.length < (isCloudMode ? 6 : 4)) {
+      setAuthError(
+        isCloudMode
+          ? "Use a password with at least 6 characters for your cloud account."
+          : "Use a password with at least 4 characters."
+      );
+      return;
+    }
+
+    if (isCloudMode && !/^[a-z0-9][a-z0-9._-]{2,31}$/i.test(signUpForm.username.trim())) {
+      setAuthError("Use a username with 3-32 letters, numbers, dots, underscores, or hyphens.");
       return;
     }
 
@@ -247,6 +258,26 @@ function MemoriesPage() {
     await loadCurrentUser();
   };
 
+  const handleImportLocalMemories = async () => {
+    setIsImporting(true);
+    setSaveError("");
+    setSaveSuccess("");
+
+    try {
+      const { importedCount, totalCount } = await importLocalMemories();
+      setSaveSuccess(
+        totalCount
+          ? `Imported ${importedCount} of ${totalCount} browser memories into your cloud vault.`
+          : "No browser memories were found for this username on this device."
+      );
+      await loadCurrentUser();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Could not import browser memories.");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   return (
     <section className="page-stack section-block">
       <div className="section-heading">
@@ -291,6 +322,7 @@ function MemoriesPage() {
                   <input
                     type="text"
                     value={signInForm.username}
+                    required
                     onChange={(event) =>
                       setSignInForm((currentForm) => ({
                         ...currentForm,
@@ -306,6 +338,7 @@ function MemoriesPage() {
                   <input
                     type="password"
                     value={signInForm.password}
+                    required
                     onChange={(event) =>
                       setSignInForm((currentForm) => ({
                         ...currentForm,
@@ -342,6 +375,7 @@ function MemoriesPage() {
                   <input
                     type="text"
                     value={signUpForm.username}
+                    required
                     onChange={(event) =>
                       setSignUpForm((currentForm) => ({
                         ...currentForm,
@@ -357,6 +391,8 @@ function MemoriesPage() {
                   <input
                     type="password"
                     value={signUpForm.password}
+                    minLength={isCloudMode ? 6 : 4}
+                    required
                     onChange={(event) =>
                       setSignUpForm((currentForm) => ({
                         ...currentForm,
@@ -372,6 +408,8 @@ function MemoriesPage() {
                   <input
                     type="password"
                     value={signUpForm.confirmPassword}
+                    minLength={isCloudMode ? 6 : 4}
+                    required
                     onChange={(event) =>
                       setSignUpForm((currentForm) => ({
                         ...currentForm,
@@ -413,6 +451,17 @@ function MemoriesPage() {
               <p className="section-tag">Logged in</p>
               <h3>{currentUser.displayName || currentUser.username}</h3>
             </div>
+
+            {isCloudMode ? (
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={handleImportLocalMemories}
+                disabled={isImporting}
+              >
+                {isImporting ? "Importing..." : "Import memories from this device"}
+              </button>
+            ) : null}
 
             <button className="secondary-button" type="button" onClick={handleLogout}>
               Log out

@@ -7,8 +7,15 @@ import {
   getVaultMemories,
   saveAdminConfig,
 } from "../localMemoryVault";
+import {
+  getCloudAdminUsers,
+  getCurrentVaultUser,
+  getMemoryStorageMode,
+  signInVaultAccount,
+  signOutVaultAccount,
+} from "../memoryVaultApi";
 
-function MemoryAdminPage() {
+function LocalMemoryAdminPage() {
   const [adminReady, setAdminReady] = useState(false);
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [adminPassword, setAdminPassword] = useState("");
@@ -183,6 +190,169 @@ function MemoryAdminPage() {
         </>
       )}
     </section>
+  );
+}
+
+function CloudMemoryAdminPage() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [status, setStatus] = useState("");
+
+  const loadCloudUsers = async () => {
+    try {
+      const result = await getCloudAdminUsers();
+      setUsers(result.users || []);
+      setIsAuthorized(true);
+      setStatus("");
+    } catch (error) {
+      setUsers([]);
+      setIsAuthorized(false);
+      setStatus(error instanceof Error ? error.message : "Could not load cloud users.");
+    }
+  };
+
+  useEffect(() => {
+    const loadSession = async () => {
+      try {
+        const user = await getCurrentVaultUser();
+        setCurrentUser(user);
+
+        if (user) {
+          await loadCloudUsers();
+        }
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : "Could not load the admin session.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void loadSession();
+  }, []);
+
+  const handleSignIn = async (event) => {
+    event.preventDefault();
+    setIsLoading(true);
+    setStatus("");
+
+    try {
+      const user = await signInVaultAccount({ username, password });
+      setCurrentUser(user);
+      setPassword("");
+      await loadCloudUsers();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not sign in.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOutVaultAccount();
+      setCurrentUser(null);
+      setUsers([]);
+      setIsAuthorized(false);
+      setStatus("");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not sign out.");
+    }
+  };
+
+  return (
+    <section className="page-stack section-block">
+      <div className="section-heading">
+        <p className="section-tag">Cloud admin</p>
+        <h2>Memory account users</h2>
+        <p className="copy-status">
+          Only accounts explicitly authorized in Supabase can view this user list.
+        </p>
+      </div>
+
+      {isLoading ? (
+        <article className="memory-letter-card">
+          <p>Loading cloud admin...</p>
+        </article>
+      ) : !currentUser ? (
+        <article className="memory-letter-card">
+          <p className="section-tag">Admin sign in</p>
+          <h3>Sign in with your memory account</h3>
+          <form className="vault-form" onSubmit={handleSignIn}>
+            <label>
+              Username
+              <input
+                type="text"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                autoComplete="username"
+                required
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+                required
+              />
+            </label>
+            <button className="primary-button" type="submit" disabled={isLoading}>
+              Sign in
+            </button>
+          </form>
+          <p className="copy-status">{status}</p>
+        </article>
+      ) : (
+        <>
+          <div className="vault-toolbar">
+            <div>
+              <p className="section-tag">Signed in as</p>
+              <h3>{currentUser.displayName || currentUser.username}</h3>
+            </div>
+            <button className="secondary-button" type="button" onClick={handleSignOut}>
+              Log out
+            </button>
+          </div>
+
+          {status ? <p className="copy-status">{status}</p> : null}
+
+          {isAuthorized ? (
+            <>
+              <article className="memory-letter-card">
+                <p className="section-tag">Accounts</p>
+                <h3>{users.length} users</h3>
+                <p>Memory totals are shown; private memory contents and passwords are not exposed.</p>
+              </article>
+              <div className="vault-admin-grid">
+                {users.map((user) => (
+                  <article className="memory-letter-card" key={user.id}>
+                    <p className="section-tag">Memory account</p>
+                    <h3>{user.displayName || user.username}</h3>
+                    <p>Username: {user.username}</p>
+                    <p>Saved memories: {user.memoryCount}</p>
+                    <p>Joined: {new Date(user.createdAt).toLocaleDateString()}</p>
+                  </article>
+                ))}
+              </div>
+            </>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
+function MemoryAdminPage() {
+  return getMemoryStorageMode() === "cloud" ? (
+    <CloudMemoryAdminPage />
+  ) : (
+    <LocalMemoryAdminPage />
   );
 }
 

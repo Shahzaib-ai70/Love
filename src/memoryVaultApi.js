@@ -3,12 +3,13 @@ import {
   deleteUserMemory as deleteLocalUserMemory,
   getCurrentVaultUser as getLocalCurrentVaultUser,
   getUserMemories as getLocalUserMemories,
+  getVaultAccounts,
   saveUserMemory as saveLocalUserMemory,
   signInVaultAccount as signInLocalVaultAccount,
   signOutVaultAccount as signOutLocalVaultAccount,
 } from "./localMemoryVault";
 import {
-  getSupabasePublicFileUrl,
+  getSupabaseSignedFileUrl,
   getSupabaseSession,
   getSupabaseUser,
   isSupabaseConfigured,
@@ -28,6 +29,12 @@ function normalizeUsername(username) {
 
 function buildVaultEmail(username) {
   return `${normalizeUsername(username)}@love-memories.app`;
+}
+
+function validateCloudUsername(username) {
+  if (!/^[a-z0-9][a-z0-9._-]{2,31}$/i.test(username)) {
+    throw new Error("Use a username with 3-32 letters, numbers, dots, underscores, or hyphens.");
+  }
 }
 
 function slugify(value) {
@@ -98,13 +105,17 @@ function mapCloudProfile(profile) {
   };
 }
 
-function mapCloudMemory(memory) {
+async function mapCloudMemory(memory) {
+  const mediaUrl = memory.media_path
+    ? await getSupabaseSignedFileUrl(MEDIA_BUCKET, memory.media_path, getAccessToken())
+    : memory.media_url || "";
+
   return {
     id: memory.id,
     userId: memory.user_id,
     title: memory.title,
     text: memory.text || "",
-    mediaUrl: memory.media_url || "",
+    mediaUrl,
     mediaData: "",
     mediaFileName: memory.media_file_name || "",
     mediaType: memory.media_type || "text",
@@ -189,7 +200,7 @@ async function uploadCloudMedia(userId, memory) {
 
     return {
       mediaPath: filePath,
-      mediaUrl: getSupabasePublicFileUrl(MEDIA_BUCKET, filePath),
+      mediaUrl: "",
     };
   } catch (error) {
     throw toFriendlyCloudError(error, "Could not upload the selected file.");
@@ -198,6 +209,12 @@ async function uploadCloudMedia(userId, memory) {
 
 async function createCloudVaultAccount({ displayName, username, password }) {
   const normalizedUsername = normalizeUsername(username);
+  validateCloudUsername(normalizedUsername);
+
+  if (password.length < 6) {
+    throw new Error("Use a password with at least 6 characters for your cloud account.");
+  }
+
   const email = buildVaultEmail(normalizedUsername);
   const trimmedDisplayName = displayName.trim();
 
@@ -284,6 +301,7 @@ async function saveCloudUserMemory(memory) {
           media_path: uploadedMedia.mediaPath || null,
           media_type: memory.mediaType || "text",
           media_file_name: memory.mediaFileName || null,
+          source_local_id: memory.sourceLocalId || null,
         },
       ],
     });
@@ -292,6 +310,52 @@ async function saveCloudUserMemory(memory) {
   } catch (error) {
     throw toFriendlyCloudError(error, "Could not save this memory.");
   }
+}
+
+async function importLocalMemoriesToCloud() {
+  const currentUser = await getCloudCurrentVaultUser();
+
+  if (!currentUser) {
+    throw new Error("Sign in first to import browser memories.");
+  }
+
+  const localAccount = getVaultAccounts().find(
+    (account) => account.username === normalizeUsername(currentUser.username)
+  );
+
+  if (!localAccount) {
+    throw new Error("No browser-local account with this username was found on this device.");
+  }
+
+  const localMemories = getLocalUserMemories(localAccount.id);
+  let importedCount = 0;
+
+  for (const memory of localMemories) {
+    const existingRows = await supabaseRequest(
+      `/rest/v1/${MEMORIES_TABLE}?user_id=eq.${encodeURIComponent(
+        currentUser.id
+      )}&source_local_id=eq.${encodeURIComponent(memory.id)}&select=id&limit=1`,
+      {
+        accessToken: getAccessToken(),
+      }
+    );
+
+    if (existingRows.length) {
+      continue;
+    }
+
+    await saveCloudUserMemory({
+      ...memory,
+      userId: currentUser.id,
+      sourceLocalId: memory.id,
+    });
+    importedCount += 1;
+  }
+
+  return {
+    importedCount,
+    totalCount: localMemories.length,
+  };
 }
 
 async function getCloudUserMemories(userId) {
@@ -305,7 +369,7 @@ async function getCloudUserMemories(userId) {
       }
     );
 
-    return rows.map(mapCloudMemory);
+    return Promise.all(rows.map(mapCloudMemory));
   } catch (error) {
     throw toFriendlyCloudError(error, "Could not load saved memories.");
   }
@@ -422,4 +486,46 @@ export async function deleteUserMemory(memoryId) {
   }
 
   await deleteCloudUserMemory(memoryId);
+}
+
+export async function importLocalMemories() {
+  if (!isSupabaseConfigured) {
+    throw new Error("Configure Supabase before importing browser memories.");
+  }
+
+  try {
+    return await importLocalMemoriesToCloud();
+  } catch (error) {
+    throw toFriendlyCloudError(error, "Could not import browser memories.");
+  }
+}
+
+export async function getCloudAdminUsers() {
+  if (!isSupabaseConfigured) {
+    throw new Error("Configure Supabase before opening cloud admin.");
+  }
+
+  const accessToken = getAccessToken();
+
+  if (!accessToken) {
+    throw new Error("Sign in with your admin account first.");
+  }
+
+  try {
+    return await supabaseRequest("/functions/v1/admin-users", {
+      accessToken,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+
+    if (/403|not authorized|not an admin/i.test(message)) {
+      throw new Error("This account is not authorized to view the user list.");
+    }
+
+    if (/404|not found/i.test(message)) {
+      throw new Error("Deploy the admin-users Supabase Edge Function to enable cloud admin.");
+    }
+
+    throw toFriendlyCloudError(error, "Could not load cloud users.");
+  }
 }
