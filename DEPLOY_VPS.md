@@ -90,6 +90,18 @@ It securely prompts for and confirms a new password, updates only the admin sett
 `/etc/love-memories-api.env`, and restarts the API service. The username remains
 `SHAHZAIBKS`; admin credentials remain separate from memory account credentials.
 
+If a memory account password no longer works, reset that account without deleting its
+memories by running this command as root on the VPS:
+
+```bash
+cd /var/www/love-memories-source
+sudo npm run memory:reset-password
+```
+
+Enter the memory account's username and choose a new password at the hidden prompts.
+The script stops the API while updating that account's password, revokes its old
+sessions, preserves its memories, and starts the API again.
+
 ## 5. Publish Build Files
 
 For the existing `testingpro.site` VPS, the active Nginx configuration uses

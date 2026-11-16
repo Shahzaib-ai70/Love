@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "node --test api/*.test.js",
     "admin:hash": "node api/create-admin-config.js",
-    "admin:reset": "node api/reset-admin-password.js"
+    "admin:reset": "node api/reset-admin-password.js",
+    "memory:reset-password": "node api/reset-memory-password.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
