@@ -30,14 +30,19 @@ npm run build
 
 This creates the production files inside `dist/`.
 
-## 4. Configure The SQL API
+## 4. Configure The SQL API And Separate Admin Login
 
-The API service needs a persistent database directory and the UUID of the account that
-should administer the site. If you have not created an account yet, initially leave
-`ADMIN_USER_ID` blank and start the service. After publishing the site and configuring
-the Nginx `/api/` proxy below, create an account from the Memories page, find its UUID in
-the database's `users` table with a SQLite viewer, then add it to the environment file.
-Passwords are hashed and cannot be used to identify the account.
+The admin login is separate from all memory accounts. Generate its configuration on the
+VPS; the password prompt is hidden and the script prints only a bcrypt hash:
+
+```bash
+cd /var/www/love-memories-source
+npm ci
+npm run admin:hash
+```
+
+Enter `SHAHZAIBKS` when asked for the admin username, then choose a separate admin
+password. Copy the two printed `ADMIN_...` lines into the API environment file:
 
 ```bash
 sudo mkdir -p /var/lib/love-memories
@@ -45,16 +50,15 @@ sudo chown www-data:www-data /var/lib/love-memories
 sudoedit /etc/love-memories-api.env
 ```
 
-Set the environment file values:
+Set these values and paste in the generated username and hash:
 
 ```text
 NODE_ENV=production
 PORT=3001
 DB_PATH=/var/lib/love-memories/love-memories.sqlite
-ADMIN_USER_ID=
+ADMIN_USERNAME=SHAHZAIBKS
+ADMIN_PASSWORD_HASH=<paste-the-generated-bcrypt-hash>
 ```
-
-For an existing account, set the value to its UUID instead of leaving it blank.
 
 Install and start the service (the service file expects the source at
 `/var/www/love-memories-source`):
@@ -67,8 +71,8 @@ sudo systemctl status love-memories-api
 ```
 
 Keep `/var/lib/love-memories` persistent when updating the website. The API applies
-database schema updates when it starts. The admin panel stays disabled until a valid
-`ADMIN_USER_ID` is set. Restart the service after changing its environment file:
+database schema updates when it starts. Restart the service after changing its
+environment file:
 
 ```bash
 sudo systemctl restart love-memories-api
@@ -87,7 +91,29 @@ sudo cp -a dist/. /var/www/testingpro.site/app/
 
 ## 6. Configure Nginx
 
-- Open `deploy/nginx-love-memories.conf`
+- The `/api/` proxy must be in the active HTTPS (`listen 443`) server block for
+  `testingpro.site`, not only the HTTP redirect block. Locate the active config:
+
+  ```bash
+  sudo nginx -T 2>/dev/null | grep -nE 'configuration file|listen 443|server_name testingpro.site|location /api/'
+  ```
+
+- Edit the active Nginx config file shown in the output and add this location inside
+  the HTTPS server block for `testingpro.site`:
+
+  ```nginx
+  location /api/ {
+    client_max_body_size 32m;
+    proxy_pass http://127.0.0.1:3001;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+  ```
+
+- Keep the existing HTTPS site configuration; do not replace it with the example config.
 - Replace `yourdomain.com` with your real domain
 - For a new site, configure `root` to match the directory where you publish the
   contents of `dist/`.

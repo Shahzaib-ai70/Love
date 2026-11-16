@@ -64,6 +64,31 @@ export async function signOutVaultAccount() {
   await request("/auth/logout", { method: "POST" });
 }
 
+export async function signInAdminAccount({ username, password }) {
+  const { admin } = await request("/admin/auth/signin", {
+    method: "POST",
+    body: { username, password },
+  });
+  return admin;
+}
+
+export async function getCurrentAdminAccount() {
+  try {
+    const { admin } = await request("/admin/auth/me");
+    return admin;
+  } catch (error) {
+    if (error instanceof Error && /sign in|required|session|admin account/i.test(error.message)) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+export async function signOutAdminAccount() {
+  await request("/admin/auth/logout", { method: "POST" });
+}
+
 export async function saveUserMemory(memory) {
   const { memory: savedMemory } = await request("/memories", {
     method: "POST",

@@ -15,6 +15,7 @@ const SQL = await initSqlJs({
   locateFile: (file) => resolve(dirname(require.resolve("sql.js")), file),
 });
 const sessionCookieName = "love_memory_session";
+const adminSessionCookieName = "love_admin_session";
 const sessionDurationMs = 30 * 24 * 60 * 60 * 1000;
 const maxMediaDataLength = 21 * 1024 * 1024;
 const authRateLimitWindowMs = 15 * 60 * 1000;
@@ -84,26 +85,6 @@ const selectPartner = prepare(
    JOIN users ON users.id = partner_links.partner_id
    WHERE partner_links.user_id = ?`
 );
-
-function isAdmin(request, response) {
-  const adminUserId = process.env.ADMIN_USER_ID;
-
-  if (!adminUserId) {
-    sendError(
-      response,
-      503,
-      "Set ADMIN_USER_ID in the server environment to enable admin access."
-    );
-    return false;
-  }
-
-  if (request.user.id !== adminUserId) {
-    sendError(response, 403, "This account is not authorized to view admin data.");
-    return false;
-  }
-
-  return true;
-}
 
 app.disable("x-powered-by");
 app.set("trust proxy", "loopback");
@@ -175,6 +156,22 @@ function clearSessionCookie(response) {
   );
 }
 
+function setAdminSessionCookie(response, token) {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  response.setHeader(
+    "Set-Cookie",
+    `${adminSessionCookieName}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${sessionDurationMs / 1000}${secure}`
+  );
+}
+
+function clearAdminSessionCookie(response) {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  response.setHeader(
+    "Set-Cookie",
+    `${adminSessionCookieName}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure}`
+  );
+}
+
 function createSession(userId, response) {
   const token = randomBytes(32).toString("base64url");
   const expiresAt = Date.now() + sessionDurationMs;
@@ -186,6 +183,16 @@ function createSession(userId, response) {
     new Date().toISOString()
   );
   setSessionCookie(response, token);
+}
+
+function createAdminSession(username, response) {
+  const token = randomBytes(32).toString("base64url");
+  const expiresAt = Date.now() + sessionDurationMs;
+
+  prepare(
+    "INSERT INTO admin_sessions (token_hash, username, expires_at, created_at) VALUES (?, ?, ?, ?)"
+  ).run(hashSessionToken(token), username, expiresAt, new Date().toISOString());
+  setAdminSessionCookie(response, token);
 }
 
 function requireAuth(request, response, next) {
@@ -217,6 +224,35 @@ function requireAuth(request, response, next) {
 
   request.user = user;
   request.sessionTokenHash = tokenHash;
+  return next();
+}
+
+function requireAdmin(request, response, next) {
+  const token = parseCookies(request.headers.cookie)[adminSessionCookieName];
+
+  if (!token) {
+    return sendError(response, 401, "Please sign in with the separate admin account.");
+  }
+
+  const tokenHash = hashSessionToken(token);
+  const session = prepare(
+    "SELECT username, expires_at AS expiresAt FROM admin_sessions WHERE token_hash = ?"
+  ).get(tokenHash);
+
+  if (!session || session.expiresAt <= Date.now()) {
+    prepare("DELETE FROM admin_sessions WHERE token_hash = ?").run(tokenHash);
+    clearAdminSessionCookie(response);
+    return sendError(response, 401, "Your admin session expired. Please sign in again.");
+  }
+
+  if (normalizeUsername(session.username) !== normalizeUsername(process.env.ADMIN_USERNAME)) {
+    prepare("DELETE FROM admin_sessions WHERE token_hash = ?").run(tokenHash);
+    clearAdminSessionCookie(response);
+    return sendError(response, 401, "The admin account has changed. Please sign in again.");
+  }
+
+  request.admin = { username: session.username };
+  request.adminSessionTokenHash = tokenHash;
   return next();
 }
 
@@ -398,6 +434,51 @@ app.post("/api/auth/logout", requireAuth, (request, response) => {
   prepare("DELETE FROM sessions WHERE token_hash = ?")
     .run(request.sessionTokenHash);
   clearSessionCookie(response);
+  response.status(204).end();
+});
+
+app.post("/api/admin/auth/signin", takeAuthAttempt, async (request, response, next) => {
+  const adminUsername = normalizeUsername(process.env.ADMIN_USERNAME);
+  const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH;
+  const username = normalizeUsername(request.body?.username);
+  const password = request.body?.password;
+
+  if (!adminUsername || !adminPasswordHash) {
+    return sendError(
+      response,
+      503,
+      "Separate admin credentials are not configured on the server."
+    );
+  }
+
+  if (!username || typeof password !== "string" || password.length > 72) {
+    return sendError(response, 401, "Wrong admin username or password.");
+  }
+
+  try {
+    if (
+      username !== adminUsername ||
+      !(await bcrypt.compare(password, adminPasswordHash))
+    ) {
+      return sendError(response, 401, "Wrong admin username or password.");
+    }
+
+    createAdminSession(process.env.ADMIN_USERNAME.trim(), response);
+    clearAuthAttempts(request);
+    return response.json({ admin: { username: process.env.ADMIN_USERNAME.trim() } });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/api/admin/auth/me", requireAdmin, (request, response) => {
+  response.json({ admin: request.admin });
+});
+
+app.post("/api/admin/auth/logout", requireAdmin, (request, response) => {
+  prepare("DELETE FROM admin_sessions WHERE token_hash = ?")
+    .run(request.adminSessionTokenHash);
+  clearAdminSessionCookie(response);
   response.status(204).end();
 });
 
@@ -655,11 +736,7 @@ app.delete("/api/memories/:memoryId", requireAuth, (request, response, next) => 
   }
 });
 
-app.get("/api/admin/users", requireAuth, (request, response) => {
-  if (!isAdmin(request, response)) {
-    return;
-  }
-
+app.get("/api/admin/users", requireAdmin, (request, response) => {
   const users = prepare(
       `SELECT users.id, users.username, users.display_name AS displayName,
               users.created_at AS createdAt,
@@ -679,11 +756,7 @@ app.get("/api/admin/users", requireAuth, (request, response) => {
   return response.json({ users });
 });
 
-app.get("/api/admin/users/:userId", requireAuth, (request, response) => {
-  if (!isAdmin(request, response)) {
-    return;
-  }
-
+app.get("/api/admin/users/:userId", requireAdmin, (request, response) => {
   const user = selectUser.get(request.params.userId);
 
   if (!user) {

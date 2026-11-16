@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import bcrypt from "bcryptjs";
 import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
@@ -46,7 +47,7 @@ async function apiRequest(path, { method = "GET", cookie, body } = {}) {
   };
 }
 
-async function startApi(adminUserId = "") {
+async function startApi(adminConfigured = false) {
   apiChild = spawn(process.execPath, [join(apiDirectory, "server.js")], {
     cwd: projectDirectory,
     env: {
@@ -54,7 +55,10 @@ async function startApi(adminUserId = "") {
       NODE_ENV: "test",
       PORT: String(apiPort),
       DB_PATH: join(temporaryDirectory, "test.sqlite"),
-      ADMIN_USER_ID: adminUserId,
+      ADMIN_USERNAME: adminConfigured ? "SHAHZAIBKS" : "",
+      ADMIN_PASSWORD_HASH: adminConfigured
+        ? bcrypt.hashSync("separate-admin-pass-123", 4)
+        : "",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -124,9 +128,28 @@ test("SQL auth, private memories, import idempotence, and admin permissions work
   const adminNotConfigured = await apiRequest("/api/admin/users", {
     cookie: adminSignup.cookie,
   });
-  assert.equal(adminNotConfigured.status, 503);
+  assert.equal(adminNotConfigured.status, 401);
+  const missingAdminConfig = await apiRequest("/api/admin/auth/signin", {
+    method: "POST",
+    body: { username: "SHAHZAIBKS", password: "separate-admin-pass-123" },
+  });
+  assert.equal(missingAdminConfig.status, 503);
   await stopApi();
-  await startApi(adminSignup.payload.user.id);
+  await startApi(true);
+
+  const wrongAdminSignIn = await apiRequest("/api/admin/auth/signin", {
+    method: "POST",
+    body: { username: "SHAHZAIBKS", password: "memory-account-pass-123" },
+  });
+  assert.equal(wrongAdminSignIn.status, 401);
+
+  const adminSignIn = await apiRequest("/api/admin/auth/signin", {
+    method: "POST",
+    body: { username: "shahzaibks", password: "separate-admin-pass-123" },
+  });
+  assert.equal(adminSignIn.status, 200);
+  assert.equal(adminSignIn.payload.admin.username, "SHAHZAIBKS");
+  assert.ok(adminSignIn.cookie);
 
   const duplicateSignup = await apiRequest("/api/auth/signup", {
     method: "POST",
@@ -260,7 +283,7 @@ test("SQL auth, private memories, import idempotence, and admin permissions work
   const forbiddenAdminView = await apiRequest("/api/admin/users", {
     cookie: guestSignup.cookie,
   });
-  assert.equal(forbiddenAdminView.status, 403);
+  assert.equal(forbiddenAdminView.status, 401);
 
   const deniedDelete = await apiRequest(
     `/api/memories/${encodeURIComponent(newMemory.payload.memory.id)}`,
@@ -272,7 +295,7 @@ test("SQL auth, private memories, import idempotence, and admin permissions work
   assert.equal(deniedDelete.status, 404);
 
   const adminUsers = await apiRequest("/api/admin/users", {
-    cookie: adminSignup.cookie,
+    cookie: adminSignIn.cookie,
   });
   assert.equal(adminUsers.status, 200);
   assert.equal(adminUsers.payload.users.length, 3);
@@ -293,7 +316,7 @@ test("SQL auth, private memories, import idempotence, and admin permissions work
 
   const adminUserDetails = await apiRequest(
     `/api/admin/users/${encodeURIComponent(adminSignup.payload.user.id)}`,
-    { cookie: adminSignup.cookie }
+    { cookie: adminSignIn.cookie }
   );
   assert.equal(adminUserDetails.status, 200);
   assert.equal(adminUserDetails.payload.memories.length, 2);
@@ -309,7 +332,7 @@ test("SQL auth, private memories, import idempotence, and admin permissions work
     `/api/admin/users/${encodeURIComponent(adminSignup.payload.user.id)}`,
     { cookie: guestSignup.cookie }
   );
-  assert.equal(deniedAdminDetails.status, 403);
+  assert.equal(deniedAdminDetails.status, 401);
 
   const signIn = await apiRequest("/api/auth/signin", {
     method: "POST",
@@ -331,4 +354,14 @@ test("SQL auth, private memories, import idempotence, and admin permissions work
     cookie: signIn.cookie,
   });
   assert.equal(expiredSession.status, 401);
+
+  const adminLogout = await apiRequest("/api/admin/auth/logout", {
+    method: "POST",
+    cookie: adminSignIn.cookie,
+  });
+  assert.equal(adminLogout.status, 204);
+  const expiredAdminSession = await apiRequest("/api/admin/auth/me", {
+    cookie: adminSignIn.cookie,
+  });
+  assert.equal(expiredAdminSession.status, 401);
 });

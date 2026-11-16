@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import {
+  getCurrentAdminAccount,
   getCloudAdminUserDetails,
   getCloudAdminUsers,
-  getCurrentVaultUser,
-  signInVaultAccount,
-  signOutVaultAccount,
+  signInAdminAccount,
+  signOutAdminAccount,
 } from "../memoryVaultApi";
 
 function formatDate(dateString) {
@@ -12,7 +12,7 @@ function formatDate(dateString) {
 }
 
 function MemoryAdminPage() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentAdmin, setCurrentAdmin] = useState(null);
   const [users, setUsers] = useState([]);
   const [selectedDetails, setSelectedDetails] = useState(null);
   const [username, setUsername] = useState("");
@@ -52,10 +52,10 @@ function MemoryAdminPage() {
   useEffect(() => {
     const loadSession = async () => {
       try {
-        const user = await getCurrentVaultUser();
-        setCurrentUser(user);
+        const admin = await getCurrentAdminAccount();
+        setCurrentAdmin(admin);
 
-        if (user) {
+        if (admin) {
           await loadCloudUsers();
         }
       } catch (error) {
@@ -74,8 +74,8 @@ function MemoryAdminPage() {
     setStatus("");
 
     try {
-      const user = await signInVaultAccount({ username, password });
-      setCurrentUser(user);
+      const admin = await signInAdminAccount({ username, password });
+      setCurrentAdmin(admin);
       setPassword("");
       await loadCloudUsers();
     } catch (error) {
@@ -87,8 +87,8 @@ function MemoryAdminPage() {
 
   const handleSignOut = async () => {
     try {
-      await signOutVaultAccount();
-      setCurrentUser(null);
+      await signOutAdminAccount();
+      setCurrentAdmin(null);
       setUsers([]);
       setSelectedDetails(null);
       setIsAuthorized(false);
@@ -104,7 +104,8 @@ function MemoryAdminPage() {
         <p className="section-tag">Cloud admin</p>
         <h2>Memory account users</h2>
         <p className="copy-status">
-          Only the administrator account configured on the server can view this user list.
+          Sign in with the separate admin username and password configured on the server.
+          Memory account credentials are not used for admin access.
         </p>
       </div>
 
@@ -112,10 +113,10 @@ function MemoryAdminPage() {
         <article className="memory-letter-card">
           <p>Loading admin panel...</p>
         </article>
-      ) : !currentUser ? (
+      ) : !currentAdmin ? (
         <article className="memory-letter-card">
           <p className="section-tag">Admin sign in</p>
-          <h3>Sign in with your memory account</h3>
+          <h3>Sign in to your separate admin account</h3>
           <form className="vault-form" onSubmit={handleSignIn}>
             <label>
               Username
@@ -148,7 +149,7 @@ function MemoryAdminPage() {
           <div className="vault-toolbar">
             <div>
               <p className="section-tag">Signed in as</p>
-              <h3>{currentUser.displayName || currentUser.username}</h3>
+              <h3>{currentAdmin.username}</h3>
             </div>
             <button className="secondary-button" type="button" onClick={handleSignOut}>
               Log out

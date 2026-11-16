@@ -36,8 +36,9 @@ work across devices. Existing browser-only memories can be imported from the ori
 
 ## Admin
 
-The admin panel is at `/love-vault-admin-2026` on your deployed site. Set `ADMIN_USER_ID`
-in the API environment to the UUID of the authorized account. The admin can view all
-account and partner details, saved memory content and attachments, and chat messages.
-Passwords and session credentials are never exposed. See `DEPLOY_VPS.md` for deployment
-configuration.
+The admin panel is at `/love-vault-admin-2026` on your deployed site. Admin sign-in uses
+separate server-configured credentials; it does not use a memory account. Run
+`npm run admin:hash` in an interactive terminal to create the username and bcrypt password
+hash configuration. The admin can view account and partner details, saved memory content
+and attachments, and chat messages. Passwords and session credentials are never exposed.
+See `DEPLOY_VPS.md` for deployment configuration.
