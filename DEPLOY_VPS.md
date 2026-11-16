@@ -1,6 +1,7 @@
 # VPS Deployment
 
-This project is already suitable for VPS deployment as a static website. No app behavior changes are required.
+The website is served as static files, while accounts, memories, partner invitations,
+and chat messages require the SQL API service to remain running with persistent storage.
 
 ## 1. Server Requirements
 
@@ -29,7 +30,51 @@ npm run build
 
 This creates the production files inside `dist/`.
 
-## 4. Publish Build Files
+## 4. Configure The SQL API
+
+The API service needs a persistent database directory and the UUID of the account that
+should administer the site. If you have not created an account yet, initially leave
+`ADMIN_USER_ID` blank and start the service. After publishing the site and configuring
+the Nginx `/api/` proxy below, create an account from the Memories page, find its UUID in
+the database's `users` table with a SQLite viewer, then add it to the environment file.
+Passwords are hashed and cannot be used to identify the account.
+
+```bash
+sudo mkdir -p /var/lib/love-memories
+sudo chown www-data:www-data /var/lib/love-memories
+sudoedit /etc/love-memories-api.env
+```
+
+Set the environment file values:
+
+```text
+NODE_ENV=production
+PORT=3001
+DB_PATH=/var/lib/love-memories/love-memories.sqlite
+ADMIN_USER_ID=
+```
+
+For an existing account, set the value to its UUID instead of leaving it blank.
+
+Install and start the service (the service file expects the source at
+`/var/www/love-memories-source`):
+
+```bash
+sudo cp deploy/love-memories-api.service /etc/systemd/system/love-memories-api.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now love-memories-api
+sudo systemctl status love-memories-api
+```
+
+Keep `/var/lib/love-memories` persistent when updating the website. The API applies
+database schema updates when it starts. The admin panel stays disabled until a valid
+`ADMIN_USER_ID` is set. Restart the service after changing its environment file:
+
+```bash
+sudo systemctl restart love-memories-api
+```
+
+## 5. Publish Build Files
 
 For the existing `testingpro.site` VPS, the active Nginx configuration uses
 `/var/www/testingpro.site/app` as its web root. Copying files to
@@ -40,7 +85,7 @@ sudo mkdir -p /var/www/testingpro.site/app
 sudo cp -a dist/. /var/www/testingpro.site/app/
 ```
 
-## 5. Configure Nginx
+## 6. Configure Nginx
 
 - Open `deploy/nginx-love-memories.conf`
 - Replace `yourdomain.com` with your real domain
@@ -63,7 +108,7 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-## 6. Enable HTTPS
+## 7. Enable HTTPS
 
 If your domain already points to the VPS:
 
@@ -73,7 +118,7 @@ sudo apt install certbot python3-certbot-nginx -y
 sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
 ```
 
-## 7. Important Note About Routing
+## 8. Important Note About Routing
 
 This site uses React Router with routes like:
 
@@ -91,7 +136,7 @@ try_files $uri $uri/ /index.html;
 
 That line is already included in `deploy/nginx-love-memories.conf`.
 
-## 8. Update Website Later
+## 9. Update Website Later
 
 Whenever you change the website:
 

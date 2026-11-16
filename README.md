@@ -5,8 +5,9 @@ A romantic React + Vite website with:
 - intro page with live heart name preview
 - separate pages for home, memories, messages, and heart maker
 - 100+ love messages
-- hidden separate admin route
-- browser-local memories now prepared for Supabase cloud saving
+- private memory accounts stored in the SQL API database
+- username-based partner invitations and private one-to-one chat
+- a hidden admin panel for account details, saved memories, attachments, and partner chats
 - VPS deployment guide for Nginx
 
 ## Run locally
@@ -26,10 +27,17 @@ npm run build
 
 See `DEPLOY_VPS.md`.
 
-## Permanent Memories
+## Memory accounts and partner chat
 
-To switch the `Memories` page from browser-local mode to permanent, per-account cloud mode, follow `SUPABASE_SETUP.md` and copy `.env.example` to `.env`. Existing browser-only memories can be imported from the original device after cloud setup.
+Accounts and saved memories are stored in the SQL database used by the API. Partners can
+invite each other by username; chat is enabled only after the recipient accepts. The API
+must be running and its database must be persistent for accounts, memories, and chats to
+work across devices. Existing browser-only memories can be imported from the original device.
 
 ## Admin
 
-Cloud admin URL: `/love-vault-admin-2026` on your deployed site. Configure the authorized admin account and deploy its Supabase Edge Function as described in `SUPABASE_SETUP.md`.
+The admin panel is at `/love-vault-admin-2026` on your deployed site. Set `ADMIN_USER_ID`
+in the API environment to the UUID of the authorized account. The admin can view all
+account and partner details, saved memory content and attachments, and chat messages.
+Passwords and session credentials are never exposed. See `DEPLOY_VPS.md` for deployment
+configuration.

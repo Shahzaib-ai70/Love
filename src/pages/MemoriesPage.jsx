@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  createPartnerInvite,
   createVaultAccount,
   deleteUserMemory,
   getMemoryStorageMode,
   getCurrentVaultUser,
+  getPartnerChat,
   getUserMemories,
   importLocalMemories,
+  respondToPartnerInvite,
   saveUserMemory,
+  sendPartnerMessage,
   signInVaultAccount,
   signOutVaultAccount,
 } from "../memoryVaultApi";
@@ -33,11 +37,22 @@ function isDirectVideoUrl(url) {
 }
 
 function MemoriesPage() {
-  const isCloudMode = getMemoryStorageMode() === "cloud";
-  const maxUploadSizeMb = isCloudMode ? 15 : 2.5;
+  const isSqlMode = getMemoryStorageMode() === "sql";
+  const maxUploadSizeMb = 15;
   const [mode, setMode] = useState("signin");
   const [currentUser, setCurrentUser] = useState(null);
   const [memories, setMemories] = useState([]);
+  const [chat, setChat] = useState({
+    partner: null,
+    receivedInvites: [],
+    sentInvites: [],
+    messages: [],
+  });
+  const [chatUsername, setChatUsername] = useState("");
+  const [chatMessage, setChatMessage] = useState("");
+  const [chatStatus, setChatStatus] = useState("");
+  const [isLoadingChat, setIsLoadingChat] = useState(false);
+  const [isChatActionPending, setIsChatActionPending] = useState(false);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [authError, setAuthError] = useState("");
   const [saveError, setSaveError] = useState("");
@@ -80,21 +95,121 @@ function MemoriesPage() {
     void loadCurrentUser();
   }, []);
 
+  useEffect(() => {
+    if (!currentUser) {
+      setChat({
+        partner: null,
+        receivedInvites: [],
+        sentInvites: [],
+        messages: [],
+      });
+      return undefined;
+    }
+
+    let active = true;
+    const refreshChat = async () => {
+      try {
+        const chatState = await getPartnerChat();
+        if (active) {
+          setChat(chatState);
+          setChatStatus("");
+        }
+      } catch (error) {
+        if (active) {
+          setChatStatus(error instanceof Error ? error.message : "Could not load partner chat.");
+        }
+      } finally {
+        if (active) {
+          setIsLoadingChat(false);
+        }
+      }
+    };
+
+    setIsLoadingChat(true);
+    void refreshChat();
+    const refreshTimer = window.setInterval(() => {
+      void refreshChat();
+    }, 5000);
+
+    return () => {
+      active = false;
+      window.clearInterval(refreshTimer);
+    };
+  }, [currentUser]);
+
+  const refreshChat = async () => {
+    try {
+      setChat(await getPartnerChat());
+      setChatStatus("");
+    } catch (error) {
+      setChatStatus(error instanceof Error ? error.message : "Could not refresh partner chat.");
+    }
+  };
+
+  const handleCreatePartnerInvite = async (event) => {
+    event.preventDefault();
+    setIsChatActionPending(true);
+    setChatStatus("");
+
+    try {
+      await createPartnerInvite(chatUsername.trim());
+      setChatUsername("");
+      setChatStatus("Invitation sent. Chat will open when they accept.");
+      await refreshChat();
+    } catch (error) {
+      setChatStatus(error instanceof Error ? error.message : "Could not send invitation.");
+    } finally {
+      setIsChatActionPending(false);
+    }
+  };
+
+  const handlePartnerInvite = async (inviteId, response) => {
+    setIsChatActionPending(true);
+    setChatStatus("");
+
+    try {
+      await respondToPartnerInvite(inviteId, response);
+      await refreshChat();
+    } catch (error) {
+      setChatStatus(error instanceof Error ? error.message : "Could not update invitation.");
+    } finally {
+      setIsChatActionPending(false);
+    }
+  };
+
+  const handleSendChatMessage = async (event) => {
+    event.preventDefault();
+    if (!chatMessage.trim()) {
+      return;
+    }
+
+    setIsChatActionPending(true);
+    setChatStatus("");
+
+    try {
+      await sendPartnerMessage(chatMessage);
+      setChatMessage("");
+      await refreshChat();
+    } catch (error) {
+      setChatStatus(error instanceof Error ? error.message : "Could not send message.");
+    } finally {
+      setIsChatActionPending(false);
+    }
+  };
+
   const memoryCountLabel = useMemo(() => {
     if (isLoadingUser) {
       return "Loading your private memory vault.";
     }
 
     if (!currentUser) {
-      return isCloudMode
-        ? "Create a private account or sign in to save memories permanently."
-        : "Create a private account or sign in to open your memories.";
+      return "Create a private account or sign in to save and open your memories.";
     }
 
     return `${memories.length} private memories saved for ${
       currentUser.displayName || currentUser.username
     }.`;
-  }, [currentUser, isCloudMode, isLoadingUser, memories.length]);
+  }, [currentUser, isLoadingUser, memories.length]);
 
   const handleSignIn = async (event) => {
     event.preventDefault();
@@ -118,16 +233,14 @@ function MemoriesPage() {
       return;
     }
 
-    if (signUpForm.password.length < (isCloudMode ? 6 : 4)) {
+    if (signUpForm.password.length < 8) {
       setAuthError(
-        isCloudMode
-          ? "Use a password with at least 6 characters for your cloud account."
-          : "Use a password with at least 4 characters."
+        "Use a password with at least 8 characters."
       );
       return;
     }
 
-    if (isCloudMode && !/^[a-z0-9][a-z0-9._-]{2,31}$/i.test(signUpForm.username.trim())) {
+    if (!/^[a-z0-9][a-z0-9._-]{2,31}$/i.test(signUpForm.username.trim())) {
       setAuthError("Use a username with 3-32 letters, numbers, dots, underscores, or hyphens.");
       return;
     }
@@ -155,9 +268,7 @@ function MemoriesPage() {
 
     if (file.size > maxUploadSizeMb * 1024 * 1024) {
       setSaveError(
-        isCloudMode
-          ? `Keep uploads under ${maxUploadSizeMb} MB for fast cloud saving.`
-          : `For browser local storage, keep files under ${maxUploadSizeMb} MB.`
+        `Keep uploads under ${maxUploadSizeMb} MB for reliable saving.`
       );
       event.target.value = "";
       return;
@@ -230,9 +341,7 @@ function MemoriesPage() {
         mediaData: "",
       });
       setSaveSuccess(
-        isCloudMode
-          ? "Memory saved permanently in your cloud vault."
-          : "Memory saved in this browser vault."
+        "Memory saved to your private account."
       );
       await loadCurrentUser();
     } catch (error) {
@@ -267,7 +376,7 @@ function MemoriesPage() {
       const { importedCount, totalCount } = await importLocalMemories();
       setSaveSuccess(
         totalCount
-          ? `Imported ${importedCount} of ${totalCount} browser memories into your cloud vault.`
+          ? `Imported ${importedCount} of ${totalCount} browser memories into your SQL account.`
           : "No browser memories were found for this username on this device."
       );
       await loadCurrentUser();
@@ -284,10 +393,8 @@ function MemoriesPage() {
         <p className="section-tag">Private memories</p>
         <h2>Save your own memory vault</h2>
         <p className="copy-status">
-          {memoryCountLabel}{" "}
-          {isCloudMode
-            ? "Cloud mode is active, so accounts and memories save in Supabase."
-            : "Local mode is active, so this browser keeps its own accounts, passwords, and memories until Supabase keys are added."}
+          {memoryCountLabel} Your account and memories are stored in the site's SQL database and
+          can be accessed from any device.
         </p>
       </div>
 
@@ -391,7 +498,7 @@ function MemoriesPage() {
                   <input
                     type="password"
                     value={signUpForm.password}
-                    minLength={isCloudMode ? 6 : 4}
+                    minLength={8}
                     required
                     onChange={(event) =>
                       setSignUpForm((currentForm) => ({
@@ -408,7 +515,7 @@ function MemoriesPage() {
                   <input
                     type="password"
                     value={signUpForm.confirmPassword}
-                    minLength={isCloudMode ? 6 : 4}
+                    minLength={8}
                     required
                     onChange={(event) =>
                       setSignUpForm((currentForm) => ({
@@ -428,9 +535,7 @@ function MemoriesPage() {
 
             <p className="copy-status">
               {authError ||
-                (isCloudMode
-                  ? "Cloud account mode is ready. New memories can save permanently after Supabase setup."
-                  : "Each browser keeps its own private memory login.")}
+                "Create an account to save memories securely to the site's SQL database."}
             </p>
           </article>
 
@@ -438,9 +543,8 @@ function MemoriesPage() {
             <p className="section-tag">How it works</p>
             <h3>Private vault access</h3>
             <p>
-              {isCloudMode
-                ? "When someone creates an account here, their login and memories can sync through Supabase instead of staying on one device."
-                : "When someone opens the Memories page, they first create an account or sign in with a password. After that, they can save text messages, images, and short videos in their own private browser vault."}
+              Your account works on every device. Sign in with the same username and password to
+              see the memories stored in your private SQL account.
             </p>
           </article>
         </div>
@@ -452,7 +556,7 @@ function MemoriesPage() {
               <h3>{currentUser.displayName || currentUser.username}</h3>
             </div>
 
-            {isCloudMode ? (
+            {isSqlMode ? (
               <button
                 className="secondary-button"
                 type="button"
@@ -467,6 +571,122 @@ function MemoriesPage() {
               Log out
             </button>
           </div>
+
+          <article className="memory-letter-card partner-chat-card">
+            <p className="section-tag">Partner chat</p>
+            <h3>
+              {chat.partner
+                ? `Chat with ${chat.partner.displayName || chat.partner.username}`
+                : "Connect with your partner"}
+            </h3>
+
+            {isLoadingChat ? <p>Loading partner chat...</p> : null}
+
+            {!chat.partner ? (
+              <>
+                <p>
+                  Share usernames and send an invitation. Chat becomes available after the other
+                  person accepts.
+                </p>
+                <form className="vault-form partner-invite-form" onSubmit={handleCreatePartnerInvite}>
+                  <label>
+                    Partner username
+                    <input
+                      type="text"
+                      value={chatUsername}
+                      required
+                      onChange={(event) => setChatUsername(event.target.value)}
+                      placeholder="Enter their username"
+                    />
+                  </label>
+                  <button className="primary-button" type="submit" disabled={isChatActionPending}>
+                    Send chat invitation
+                  </button>
+                </form>
+
+                {chat.receivedInvites.length ? (
+                  <div className="partner-invite-list">
+                    <h4>Invitations for you</h4>
+                    {chat.receivedInvites.map((invite) => (
+                      <div className="partner-invite-row" key={invite.id}>
+                        <p>
+                          <strong>{invite.displayName || invite.username}</strong> (@{invite.username})
+                          {" "}wants to chat.
+                        </p>
+                        <div>
+                          <button
+                            className="primary-button"
+                            type="button"
+                            disabled={isChatActionPending}
+                            onClick={() => handlePartnerInvite(invite.id, "accept")}
+                          >
+                            Accept
+                          </button>
+                          <button
+                            className="secondary-button"
+                            type="button"
+                            disabled={isChatActionPending}
+                            onClick={() => handlePartnerInvite(invite.id, "decline")}
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {chat.sentInvites.length ? (
+                  <div className="partner-invite-list">
+                    <h4>Waiting for a response</h4>
+                    {chat.sentInvites.map((invite) => (
+                      <p key={invite.id}>
+                        Invitation sent to {invite.displayName || invite.username} (@
+                        {invite.username}).
+                      </p>
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <div className="partner-chat-messages" aria-live="polite">
+                  {chat.messages.length ? (
+                    chat.messages.map((message) => (
+                      <article
+                        className={`partner-chat-message ${
+                          message.senderId === currentUser.id ? "is-mine" : ""
+                        }`}
+                        key={message.id}
+                      >
+                        <p>{message.text}</p>
+                        <time dateTime={message.createdAt}>{formatDate(message.createdAt)}</time>
+                      </article>
+                    ))
+                  ) : (
+                    <p>No messages yet. Send your first hello.</p>
+                  )}
+                </div>
+                <form className="vault-form partner-message-form" onSubmit={handleSendChatMessage}>
+                  <label>
+                    Message
+                    <textarea
+                      rows={3}
+                      maxLength={5000}
+                      value={chatMessage}
+                      onChange={(event) => setChatMessage(event.target.value)}
+                      placeholder="Write a message..."
+                      required
+                    />
+                  </label>
+                  <button className="primary-button" type="submit" disabled={isChatActionPending}>
+                    Send message
+                  </button>
+                </form>
+              </>
+            )}
+            {chatStatus ? <p className="copy-status" role="status">{chatStatus}</p> : null}
+          </article>
 
           <article className="memory-letter-card">
             <p className="section-tag">Add new memory</p>
@@ -521,13 +741,15 @@ function MemoriesPage() {
 
               <label>
                 Upload image or short video
-                <input type="file" accept="image/*,video/*" onChange={handleFileChange} />
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/ogg"
+                  onChange={handleFileChange}
+                />
               </label>
 
               <p className="copy-status">
-                {isCloudMode
-                  ? `Files can upload to cloud storage. Keep them under ${maxUploadSizeMb} MB for smooth saving.`
-                  : "Local browser storage has limited space, so keep uploads small."}{" "}
+                {`Uploads are stored with your account. Keep files under ${maxUploadSizeMb} MB.`}{" "}
                 Selected file: {memoryForm.mediaFileName || "none"}
               </p>
 
@@ -539,9 +761,7 @@ function MemoriesPage() {
             <p className="copy-status">
               {saveError ||
                 saveSuccess ||
-                (isCloudMode
-                  ? "Saved memories stay in your cloud vault."
-                  : "Saved memories stay in this browser.")}
+                "Saved memories stay in your private SQL account."}
             </p>
           </article>
 
