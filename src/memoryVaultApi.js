@@ -106,8 +106,14 @@ export async function deleteUserMemory(memoryId) {
   await request(`/memories/${encodeURIComponent(memoryId)}`, { method: "DELETE" });
 }
 
-export async function getPartnerChat() {
-  return request("/chat");
+export async function getPartnerChat(partnerId) {
+  const query = partnerId ? `?partnerId=${encodeURIComponent(partnerId)}` : "";
+  return request(`/chat${query}`);
+}
+
+export async function searchChatUsers(username) {
+  const query = new URLSearchParams({ username });
+  return request(`/chat/search?${query}`);
 }
 
 export async function createPartnerInvite(username) {
@@ -123,10 +129,10 @@ export async function respondToPartnerInvite(inviteId, response) {
   });
 }
 
-export async function sendPartnerMessage(text) {
+export async function sendPartnerMessage(recipientId, text) {
   const { message } = await request("/chat/messages", {
     method: "POST",
-    body: { text },
+    body: { recipientId, text },
   });
   return message;
 }

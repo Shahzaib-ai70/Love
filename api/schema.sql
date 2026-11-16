@@ -63,10 +63,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS partner_invites_pending_pair_idx
   WHERE status = 'pending';
 
 CREATE TABLE IF NOT EXISTS partner_links (
-  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   partner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   linked_at TEXT NOT NULL,
-  CHECK (user_id <> partner_id)
+  CHECK (user_id <> partner_id),
+  PRIMARY KEY (user_id, partner_id)
 );
 
 CREATE INDEX IF NOT EXISTS partner_links_partner_id_idx

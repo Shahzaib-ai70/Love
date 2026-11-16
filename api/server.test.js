@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import bcrypt from "bcryptjs";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
+import initSqlJs from "sql.js";
 
 const apiDirectory = fileURLToPath(new URL(".", import.meta.url));
 const projectDirectory = resolve(apiDirectory, "..");
@@ -101,6 +102,42 @@ async function stopApi() {
 
 before(async () => {
   baseUrl = `http://127.0.0.1:${apiPort}`;
+  const SQL = await initSqlJs();
+  const legacyDatabase = new SQL.Database();
+  legacyDatabase.run(
+    `CREATE TABLE users (
+       id TEXT PRIMARY KEY,
+       username TEXT NOT NULL COLLATE NOCASE UNIQUE,
+       display_name TEXT NOT NULL DEFAULT '',
+       password_hash TEXT NOT NULL,
+       created_at TEXT NOT NULL
+     )`
+  );
+  legacyDatabase.run(
+    `CREATE TABLE partner_links (
+       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+       partner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+       linked_at TEXT NOT NULL,
+       CHECK (user_id <> partner_id)
+     )`
+  );
+  legacyDatabase.run(
+    `INSERT INTO users (id, username, display_name, password_hash, created_at)
+     VALUES
+       ('legacy-one-id', 'legacyone', 'Legacy One', ?, '2024-01-01'),
+       ('legacy-two-id', 'legacytwo', 'Legacy Two', ?, '2024-01-01')`,
+    [
+      bcrypt.hashSync("legacy-one-pass-123", 4),
+      bcrypt.hashSync("legacy-two-pass-123", 4),
+    ]
+  );
+  legacyDatabase.run(
+    `INSERT INTO partner_links (user_id, partner_id, linked_at)
+     VALUES ('legacy-one-id', 'legacy-two-id', '2024-01-01'),
+            ('legacy-two-id', 'legacy-one-id', '2024-01-01')`
+  );
+  await writeFile(join(temporaryDirectory, "test.sqlite"), Buffer.from(legacyDatabase.export()));
+  legacyDatabase.close();
   await startApi();
 });
 
@@ -112,6 +149,15 @@ after(async () => {
 test("SQL auth, private memories, import idempotence, and admin permissions work", async () => {
   const health = await fetch(`${baseUrl}/api/health`).then((response) => response.json());
   assert.deepEqual(health, { status: "ok", storage: "sqlite" });
+
+  const migratedAccount = await apiRequest("/api/auth/signin", {
+    method: "POST",
+    body: { username: "legacyone", password: "legacy-one-pass-123" },
+  });
+  assert.equal(migratedAccount.status, 200);
+  const migratedChat = await apiRequest("/api/chat", { cookie: migratedAccount.cookie });
+  assert.equal(migratedChat.payload.partners.length, 1);
+  assert.equal(migratedChat.payload.partner.username, "legacytwo");
 
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const failedSignIn = await apiRequest("/api/auth/signin", {
@@ -257,13 +303,17 @@ test("SQL auth, private memories, import idempotence, and admin permissions work
   const guestChat = await apiRequest("/api/chat", {
     cookie: guestSignup.cookie,
   });
+  assert.equal(guestChat.payload.partners.length, 1);
   assert.equal(guestChat.payload.partner.username, "admin");
   assert.deepEqual(guestChat.payload.messages, []);
 
   const sentChatMessage = await apiRequest("/api/chat/messages", {
     method: "POST",
     cookie: guestSignup.cookie,
-    body: { text: "Hello from another device." },
+    body: {
+      recipientId: adminSignup.payload.user.id,
+      text: "Hello from another device.",
+    },
   });
   assert.equal(sentChatMessage.status, 201);
 
@@ -285,9 +335,49 @@ test("SQL auth, private memories, import idempotence, and admin permissions work
   const deniedUnpairedChat = await apiRequest("/api/chat/messages", {
     method: "POST",
     cookie: unpairedSignup.cookie,
-    body: { text: "This must not be sent." },
+    body: { recipientId: adminSignup.payload.user.id, text: "This must not be sent." },
   });
   assert.equal(deniedUnpairedChat.status, 403);
+
+  const secondInvite = await apiRequest("/api/chat/invites", {
+    method: "POST",
+    cookie: unpairedSignup.cookie,
+    body: { username: "admin" },
+  });
+  assert.equal(secondInvite.status, 201);
+  const secondAccept = await apiRequest(
+    `/api/chat/invites/${encodeURIComponent(secondInvite.payload.inviteId)}/accept`,
+    { method: "POST", cookie: adminSignup.cookie }
+  );
+  assert.equal(secondAccept.status, 200);
+
+  const adminPartnerChats = await apiRequest("/api/chat", {
+    cookie: adminSignup.cookie,
+  });
+  assert.equal(adminPartnerChats.payload.partners.length, 2);
+  assert.deepEqual(
+    adminPartnerChats.payload.partners.map((partner) => partner.username),
+    ["guest", "unpaired"]
+  );
+
+  const messageToSecondPartner = await apiRequest("/api/chat/messages", {
+    method: "POST",
+    cookie: adminSignup.cookie,
+    body: { recipientId: unpairedSignup.payload.user.id, text: "Hello, second partner." },
+  });
+  assert.equal(messageToSecondPartner.status, 201);
+  const secondPartnerChat = await apiRequest(
+    `/api/chat?partnerId=${encodeURIComponent(adminSignup.payload.user.id)}`,
+    { cookie: unpairedSignup.cookie }
+  );
+  assert.equal(secondPartnerChat.payload.messages.length, 1);
+  assert.equal(secondPartnerChat.payload.messages[0].text, "Hello, second partner.");
+
+  const usernameSearch = await apiRequest("/api/chat/search?username=admin", {
+    cookie: unpairedSignup.cookie,
+  });
+  assert.equal(usernameSearch.status, 200);
+  assert.equal(usernameSearch.payload.users[0].isPartner, 1);
 
   const guestMemories = await apiRequest("/api/memories", {
     cookie: guestSignup.cookie,
@@ -312,18 +402,21 @@ test("SQL auth, private memories, import idempotence, and admin permissions work
     cookie: adminSignIn.cookie,
   });
   assert.equal(adminUsers.status, 200);
-  assert.equal(adminUsers.payload.users.length, 3);
+  assert.equal(adminUsers.payload.users.length, 5);
   assert.equal(
     adminUsers.payload.users.find((user) => user.username === "admin").memoryCount,
     2
   );
-  assert.equal(
-    adminUsers.payload.users.find((user) => user.username === "admin").partnerUsername,
-    "guest"
+  assert.deepEqual(
+    adminUsers.payload.users
+      .find((user) => user.username === "admin")
+      .partnerUsernames.split(", ")
+      .sort(),
+    ["guest", "unpaired"]
   );
   assert.equal(
     adminUsers.payload.users.find((user) => user.username === "admin").messageCount,
-    1
+    2
   );
   assert.equal("password" in adminUsers.payload.users[0], false);
   assert.equal("passwordHash" in adminUsers.payload.users[0], false);
@@ -337,9 +430,13 @@ test("SQL auth, private memories, import idempotence, and admin permissions work
   assert.ok(
     adminUserDetails.payload.memories.some((memory) => memory.text === "Private content")
   );
-  assert.equal(adminUserDetails.payload.messages.length, 1);
+  assert.equal(adminUserDetails.payload.messages.length, 2);
   assert.equal(adminUserDetails.payload.messages[0].senderUsername, "guest");
-  assert.equal(adminUserDetails.payload.invites[0].status, "accepted");
+  assert.ok(adminUserDetails.payload.invites.every((invite) => invite.status === "accepted"));
+  assert.deepEqual(
+    adminUserDetails.payload.partners.map((partner) => partner.username),
+    ["guest", "unpaired"]
+  );
   assert.equal("passwordHash" in adminUserDetails.payload.user, false);
 
   const deniedAdminDetails = await apiRequest(

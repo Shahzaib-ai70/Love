@@ -176,12 +176,7 @@ function MemoryAdminPage() {
                     <p>Username: {user.username}</p>
                     <p>Saved memories: {user.memoryCount}</p>
                     <p>Chat messages: {user.messageCount}</p>
-                    <p>
-                      Partner:{" "}
-                      {user.partnerUsername
-                        ? `${user.partnerDisplayName || user.partnerUsername} (@${user.partnerUsername})`
-                        : "Not connected"}
-                    </p>
+                    <p>Partners: {user.partnerUsernames || "None"}</p>
                     <p>Joined: {formatDate(user.createdAt)}</p>
                     <button
                       className="secondary-button"
@@ -210,9 +205,9 @@ function MemoryAdminPage() {
                     <p>Account ID: {selectedDetails.user.id}</p>
                     <p>
                       Account created {formatDate(selectedDetails.user.createdAt)}.
-                      {selectedDetails.partner
-                        ? ` Partner: ${selectedDetails.partner.displayName || selectedDetails.partner.username} (@${selectedDetails.partner.username}).`
-                        : " This account has no connected partner."}
+                      {selectedDetails.partners.length
+                        ? ` Partners: ${selectedDetails.partners.map((partner) => `@${partner.username}`).join(", ")}.`
+                        : " This account has no connected partners."}
                     </p>
                   </article>
 

@@ -42,6 +42,50 @@ function persistDatabase() {
   renameSync(temporaryPath, databasePath);
 }
 
+function migratePartnerLinks() {
+  const tableInfo = database.exec("PRAGMA table_info(partner_links)")[0];
+  if (!tableInfo) {
+    throw new Error("Partner link schema is missing.");
+  }
+
+  const primaryKeyColumns = tableInfo.values
+    .filter((column) => column[5] > 0)
+    .sort((left, right) => left[5] - right[5])
+    .map((column) => column[1]);
+  if (primaryKeyColumns.length === 2) {
+    return;
+  }
+
+  database.run("BEGIN IMMEDIATE");
+  try {
+    database.run(
+      `CREATE TABLE partner_links_multi (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        partner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        linked_at TEXT NOT NULL,
+        CHECK (user_id <> partner_id),
+        PRIMARY KEY (user_id, partner_id)
+      )`
+    );
+    database.run(
+      `INSERT OR IGNORE INTO partner_links_multi (user_id, partner_id, linked_at)
+       SELECT user_id, partner_id, linked_at FROM partner_links`
+    );
+    database.run("DROP TABLE partner_links");
+    database.run("ALTER TABLE partner_links_multi RENAME TO partner_links");
+    database.run(
+      "CREATE INDEX partner_links_partner_id_idx ON partner_links(partner_id)"
+    );
+    database.run("COMMIT");
+    persistDatabase();
+  } catch (error) {
+    database.run("ROLLBACK");
+    throw error;
+  }
+}
+
+migratePartnerLinks();
+
 function prepare(sql) {
   return {
     get(...parameters) {
@@ -99,11 +143,18 @@ const selectUser = prepare(
 const insertSession = prepare(
   "INSERT INTO sessions (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)"
 );
+const selectPartners = prepare(
+  `SELECT users.id, users.username, users.display_name AS displayName
+   FROM partner_links
+   JOIN users ON users.id = partner_links.partner_id
+   WHERE partner_links.user_id = ?
+   ORDER BY users.username COLLATE NOCASE`
+);
 const selectPartner = prepare(
   `SELECT users.id, users.username, users.display_name AS displayName
    FROM partner_links
    JOIN users ON users.id = partner_links.partner_id
-   WHERE partner_links.user_id = ?`
+   WHERE partner_links.user_id = ? AND partner_links.partner_id = ?`
 );
 
 app.disable("x-powered-by");
@@ -511,8 +562,46 @@ app.post("/api/admin/auth/logout", requireAdmin, (request, response) => {
   response.status(204).end();
 });
 
+app.get("/api/chat/search", requireAuth, (request, response) => {
+  const username = normalizeUsername(request.query.username);
+  if (username.length < 2 || username.length > 32 || !/^[a-z0-9._-]+$/.test(username)) {
+    return sendError(response, 400, "Search with at least 2 valid username characters.");
+  }
+
+  const users = prepare(
+    `SELECT users.id AS userId, users.username,
+            users.display_name AS displayName,
+            EXISTS (
+              SELECT 1 FROM partner_links
+              WHERE partner_links.user_id = ? AND partner_links.partner_id = users.id
+            ) AS isPartner,
+            EXISTS (
+              SELECT 1 FROM partner_invites
+              WHERE partner_invites.status = 'pending'
+                AND ((partner_invites.sender_id = ? AND partner_invites.recipient_id = users.id)
+                  OR (partner_invites.recipient_id = ? AND partner_invites.sender_id = users.id))
+            ) AS hasPendingInvite
+     FROM users
+     WHERE users.id <> ? AND instr(lower(users.username), ?) > 0
+     ORDER BY users.username COLLATE NOCASE
+     LIMIT 10`
+  ).all(request.user.id, request.user.id, request.user.id, request.user.id, username);
+
+  response.json({ users });
+});
+
 app.get("/api/chat", requireAuth, (request, response) => {
-  const partner = selectPartner.get(request.user.id) || null;
+  const partners = selectPartners.all(request.user.id);
+  const requestedPartnerId =
+    typeof request.query.partnerId === "string" ? request.query.partnerId : "";
+  const partner = requestedPartnerId
+    ? selectPartner.get(request.user.id, requestedPartnerId)
+    : partners[0] || null;
+
+  if (requestedPartnerId && !partner) {
+    return sendError(response, 404, "Chat partner not found.");
+  }
+
   const receivedInvites = prepare(
     `SELECT partner_invites.id, partner_invites.created_at AS createdAt,
             users.id AS userId, users.username, users.display_name AS displayName
@@ -543,7 +632,7 @@ app.get("/api/chat", requireAuth, (request, response) => {
         .reverse()
     : [];
 
-  response.json({ partner, receivedInvites, sentInvites, messages });
+  response.json({ partners, partner, receivedInvites, sentInvites, messages });
 });
 
 app.post("/api/chat/invites", requireAuth, (request, response, next) => {
@@ -565,8 +654,8 @@ app.post("/api/chat/invites", requireAuth, (request, response, next) => {
     return sendError(response, 400, "You cannot invite your own account.");
   }
 
-  if (selectPartner.get(request.user.id) || selectPartner.get(recipient.id)) {
-    return sendError(response, 409, "One of these accounts already has a chat partner.");
+  if (selectPartner.get(request.user.id, recipient.id)) {
+    return sendError(response, 409, "You are already connected with this account.");
   }
 
   const existingInvite = prepare(
@@ -610,10 +699,6 @@ app.post("/api/chat/invites/:inviteId/accept", requireAuth, (request, response, 
     return sendError(response, 404, "Pending invitation not found.");
   }
 
-  if (selectPartner.get(invite.senderId) || selectPartner.get(invite.recipientId)) {
-    return sendError(response, 409, "One of these accounts already has a chat partner.");
-  }
-
   const linkedAt = new Date().toISOString();
 
   try {
@@ -623,15 +708,15 @@ app.post("/api/chat/invites/:inviteId/accept", requireAuth, (request, response, 
       [linkedAt, invite.id]
     );
     database.run(
-      `INSERT INTO partner_links (user_id, partner_id, linked_at) VALUES (?, ?, ?), (?, ?, ?)`,
+      `INSERT OR IGNORE INTO partner_links (user_id, partner_id, linked_at)
+       VALUES (?, ?, ?), (?, ?, ?)`,
       [invite.senderId, invite.recipientId, linkedAt, invite.recipientId, invite.senderId, linkedAt]
     );
     database.run(
-      `UPDATE partner_invites
-       SET status = 'cancelled', updated_at = ?
+      `UPDATE partner_invites SET status = 'cancelled', updated_at = ?
        WHERE status = 'pending'
-         AND (sender_id IN (?, ?) OR recipient_id IN (?, ?))`,
-      [linkedAt, invite.senderId, invite.recipientId, invite.senderId, invite.recipientId]
+         AND ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?))`,
+      [linkedAt, invite.recipientId, invite.senderId, invite.senderId, invite.recipientId]
     );
     database.run("COMMIT");
     persistDatabase();
@@ -640,7 +725,7 @@ app.post("/api/chat/invites/:inviteId/accept", requireAuth, (request, response, 
     return next(error);
   }
 
-  response.json({ partner: selectPartner.get(request.user.id) });
+  response.json({ partner: selectPartner.get(request.user.id, invite.senderId) });
 });
 
 app.post("/api/chat/invites/:inviteId/decline", requireAuth, (request, response) => {
@@ -658,15 +743,17 @@ app.post("/api/chat/invites/:inviteId/decline", requireAuth, (request, response)
 
 app.post("/api/chat/messages", requireAuth, (request, response, next) => {
   const text = typeof request.body?.text === "string" ? request.body.text.trim() : "";
+  const recipientId =
+    typeof request.body?.recipientId === "string" ? request.body.recipientId : "";
 
   if (!text || text.length > 5000) {
     return sendError(response, 400, "Write a message of 1-5,000 characters.");
   }
 
-  const partner = selectPartner.get(request.user.id);
+  const partner = selectPartner.get(request.user.id, recipientId);
 
   if (!partner) {
-    return sendError(response, 403, "Accept a partner invitation before sending messages.");
+    return sendError(response, 403, "Choose one of your accepted chat partners.");
   }
 
   try {
@@ -773,11 +860,11 @@ app.get("/api/admin/users", requireAdmin, (request, response) => {
               (SELECT COUNT(*) FROM chat_messages
                WHERE chat_messages.sender_id = users.id OR chat_messages.recipient_id = users.id)
                 AS messageCount,
-              partner.username AS partnerUsername,
-              partner.display_name AS partnerDisplayName
+              (SELECT GROUP_CONCAT(partner.username, ', ')
+               FROM partner_links
+               JOIN users AS partner ON partner.id = partner_links.partner_id
+               WHERE partner_links.user_id = users.id) AS partnerUsernames
        FROM users
-       LEFT JOIN partner_links ON partner_links.user_id = users.id
-       LEFT JOIN users AS partner ON partner.id = partner_links.partner_id
        ORDER BY users.created_at DESC`
     )
     .all();
@@ -792,7 +879,7 @@ app.get("/api/admin/users/:userId", requireAdmin, (request, response) => {
     return sendError(response, 404, "User not found.");
   }
 
-  const partner = selectPartner.get(user.id) || null;
+  const partners = selectPartners.all(user.id);
   const memories = prepare(
     `SELECT id, title, text, media_url AS mediaUrl, media_data AS mediaData,
             media_file_name AS mediaFileName, media_type AS mediaType,
@@ -824,7 +911,7 @@ app.get("/api/admin/users/:userId", requireAdmin, (request, response) => {
      ORDER BY partner_invites.created_at DESC`
   ).all(user.id, user.id);
 
-  response.json({ user, partner, memories, messages, invites });
+  response.json({ user, partners, memories, messages, invites });
 });
 
 app.use((error, _request, response, _next) => {

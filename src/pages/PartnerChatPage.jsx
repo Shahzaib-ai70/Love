@@ -5,10 +5,12 @@ import {
   getCurrentVaultUser,
   getPartnerChat,
   respondToPartnerInvite,
+  searchChatUsers,
   sendPartnerMessage,
 } from "../memoryVaultApi";
 
 const emptyChat = {
+  partners: [],
   partner: null,
   receivedInvites: [],
   sentInvites: [],
@@ -22,11 +24,15 @@ function formatDate(dateString) {
 function PartnerChatPage() {
   const [currentUser, setCurrentUser] = useState(null);
   const [chat, setChat] = useState(emptyChat);
-  const [chatUsername, setChatUsername] = useState("");
+  const [selectedPartnerId, setSelectedPartnerId] = useState("");
+  const [usernameQuery, setUsernameQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
   const [chatMessage, setChatMessage] = useState("");
   const [status, setStatus] = useState("");
+  const [searchStatus, setSearchStatus] = useState("");
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isLoadingChat, setIsLoadingChat] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [isActionPending, setIsActionPending] = useState(false);
 
   useEffect(() => {
@@ -62,11 +68,14 @@ function PartnerChatPage() {
     }
 
     let active = true;
-    const refreshChat = async () => {
+    const refresh = async () => {
       try {
-        const result = await getPartnerChat();
+        const result = await getPartnerChat(selectedPartnerId || undefined);
         if (active) {
           setChat(result);
+          if (!selectedPartnerId && result.partner) {
+            setSelectedPartnerId(result.partner.id);
+          }
           setStatus("");
         }
       } catch (error) {
@@ -81,50 +90,77 @@ function PartnerChatPage() {
     };
 
     setIsLoadingChat(true);
-    void refreshChat();
+    void refresh();
     const timer = window.setInterval(() => {
-      void refreshChat();
+      void refresh();
     }, 5000);
 
     return () => {
       active = false;
       window.clearInterval(timer);
     };
-  }, [currentUser]);
+  }, [currentUser, selectedPartnerId]);
 
-  const refreshChat = async () => {
+  const refreshChat = async (partnerId = selectedPartnerId) => {
     try {
-      setChat(await getPartnerChat());
+      const result = await getPartnerChat(partnerId || undefined);
+      setChat(result);
+      if (!partnerId && result.partner) {
+        setSelectedPartnerId(result.partner.id);
+      }
       setStatus("");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not refresh partner chat.");
     }
   };
 
-  const handleCreateInvite = async (event) => {
+  const handleSearch = async (event) => {
     event.preventDefault();
-    setIsActionPending(true);
-    setStatus("");
+    setSearchStatus("");
+    setSearchResults([]);
+    setIsSearching(true);
 
     try {
-      await createPartnerInvite(chatUsername.trim());
-      setChatUsername("");
-      setStatus("Invitation sent. Chat will open when they accept.");
-      await refreshChat();
+      const { users } = await searchChatUsers(usernameQuery.trim());
+      setSearchResults(users);
+      setSearchStatus(users.length ? "" : "No users found. Check the username and try again.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not send invitation.");
+      setSearchStatus(error instanceof Error ? error.message : "Could not search usernames.");
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleInvite = async (username) => {
+    setIsActionPending(true);
+    setSearchStatus("");
+
+    try {
+      await createPartnerInvite(username);
+      await refreshChat();
+      setSearchResults((currentResults) =>
+        currentResults.map((user) =>
+          user.username === username ? { ...user, hasPendingInvite: 1 } : user
+        )
+      );
+      setSearchStatus(`Invitation sent to @${username}.`);
+    } catch (error) {
+      setSearchStatus(error instanceof Error ? error.message : "Could not send invitation.");
     } finally {
       setIsActionPending(false);
     }
   };
 
-  const handleInviteResponse = async (inviteId, response) => {
+  const handleInviteResponse = async (inviteId, response, partnerId) => {
     setIsActionPending(true);
     setStatus("");
 
     try {
       await respondToPartnerInvite(inviteId, response);
-      await refreshChat();
+      await refreshChat(response === "accept" ? partnerId : selectedPartnerId);
+      if (response === "accept") {
+        setSelectedPartnerId(partnerId);
+      }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not update invitation.");
     } finally {
@@ -134,7 +170,7 @@ function PartnerChatPage() {
 
   const handleSendMessage = async (event) => {
     event.preventDefault();
-    if (!chatMessage.trim()) {
+    if (!chatMessage.trim() || !chat.partner) {
       return;
     }
 
@@ -142,9 +178,9 @@ function PartnerChatPage() {
     setStatus("");
 
     try {
-      await sendPartnerMessage(chatMessage);
+      await sendPartnerMessage(chat.partner.id, chatMessage);
       setChatMessage("");
-      await refreshChat();
+      await refreshChat(chat.partner.id);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not send message.");
     } finally {
@@ -156,134 +192,210 @@ function PartnerChatPage() {
     <section className="page-stack section-block">
       <div className="section-heading">
         <p className="section-tag">Partner chat</p>
-        <h2>
-          {chat.partner
-            ? `Chat with ${chat.partner.displayName || chat.partner.username}`
-            : "Connect with your partner"}
-        </h2>
+        <h2>{chat.partner ? `Chat with ${chat.partner.displayName || chat.partner.username}` : "Your chats"}</h2>
         <p className="copy-status">
-          Send a username invitation, accept your partner’s invite, and chat privately.
+          Search by username and add chats with as many partners as you need.
         </p>
       </div>
 
       <article className="memory-letter-card partner-chat-card">
-        {isLoadingUser || isLoadingChat ? <p>Loading partner chat...</p> : null}
+        {isLoadingUser || isLoadingChat ? <p>Loading chats...</p> : null}
 
         {currentUser ? (
-          <p className="copy-status">
-            Using your Memories account: @{currentUser.username}. Chat needs no separate account.
+          <p className="chat-account-note">
+            Using your Memories account: <strong>@{currentUser.username}</strong>. No separate
+            account is needed.
           </p>
         ) : null}
 
         {!isLoadingUser && !currentUser ? (
           <p>
-            Create or sign in to a memory account to connect with your partner.{" "}
-            <Link to="/memories">Go to Memories</Link>
+            Sign in to your Memories account to use chat. <Link to="/memories">Go to Memories</Link>
           </p>
         ) : null}
 
-        {currentUser && !chat.partner ? (
+        {currentUser ? (
           <>
-            <p>
-              Share usernames and send an invitation. Chat becomes available after the other person
-              accepts.
-            </p>
-            <form className="vault-form partner-invite-form" onSubmit={handleCreateInvite}>
-              <label>
-                Partner username
-                <input
-                  type="text"
-                  value={chatUsername}
-                  required
-                  onChange={(event) => setChatUsername(event.target.value)}
-                  placeholder="Enter their username"
-                />
-              </label>
-              <button className="primary-button" type="submit" disabled={isActionPending}>
-                Send chat invitation
-              </button>
-            </form>
+            <section className="chat-search-section" aria-label="Find and add chat partners">
+              <h3>Find people</h3>
+              <form className="vault-form chat-search-form" onSubmit={handleSearch}>
+                <label>
+                  Search username
+                  <input
+                    type="search"
+                    value={usernameQuery}
+                    minLength={2}
+                    maxLength={32}
+                    onChange={(event) => setUsernameQuery(event.target.value)}
+                    placeholder="Type at least 2 username characters"
+                    required
+                  />
+                </label>
+                <button className="primary-button" type="submit" disabled={isSearching}>
+                  {isSearching ? "Searching..." : "Search"}
+                </button>
+              </form>
 
-            {chat.receivedInvites.length ? (
-              <div className="partner-invite-list">
-                <h4>Invitations for you</h4>
-                {chat.receivedInvites.map((invite) => (
-                  <div className="partner-invite-row" key={invite.id}>
-                    <p>
-                      <strong>{invite.displayName || invite.username}</strong> (@{invite.username})
-                      {" "}wants to chat.
-                    </p>
-                    <div>
+              {searchResults.length ? (
+                <div className="chat-search-results">
+                  {searchResults.map((user) => {
+                    const connected = Boolean(user.isPartner);
+                    const pending = Boolean(user.hasPendingInvite);
+                    return (
+                      <article className="chat-search-result" key={user.userId}>
+                        <div>
+                          <strong>{user.displayName || user.username}</strong>
+                          <span>@{user.username}</span>
+                        </div>
+                        {connected ? (
+                          <button
+                            className="secondary-button"
+                            type="button"
+                            onClick={() => setSelectedPartnerId(user.userId)}
+                          >
+                            Open chat
+                          </button>
+                        ) : (
+                          <button
+                            className="primary-button"
+                            type="button"
+                            disabled={pending || isActionPending}
+                            onClick={() => void handleInvite(user.username)}
+                          >
+                            {pending ? "Invitation pending" : "Add chat"}
+                          </button>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : null}
+              {searchStatus ? <p className="copy-status" role="status">{searchStatus}</p> : null}
+            </section>
+
+            {chat.receivedInvites.length || chat.sentInvites.length ? (
+              <section className="partner-invite-list" aria-label="Chat invitations">
+                {chat.receivedInvites.length ? (
+                  <>
+                    <h3>Invitations for you</h3>
+                    {chat.receivedInvites.map((invite) => (
+                      <div className="partner-invite-row chat-invite-card" key={invite.id}>
+                        <p>
+                          <strong>{invite.displayName || invite.username}</strong> (@{invite.username})
+                          {" "}wants to chat.
+                        </p>
+                        <div>
+                          <button
+                            className="primary-button"
+                            type="button"
+                            disabled={isActionPending}
+                            onClick={() =>
+                              void handleInviteResponse(invite.id, "accept", invite.userId)
+                            }
+                          >
+                            Accept
+                          </button>
+                          <button
+                            className="secondary-button"
+                            type="button"
+                            disabled={isActionPending}
+                            onClick={() =>
+                              void handleInviteResponse(invite.id, "decline", invite.userId)
+                            }
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                ) : null}
+                {chat.sentInvites.length ? (
+                  <>
+                    <h3>Waiting for a response</h3>
+                    {chat.sentInvites.map((invite) => (
+                      <p key={invite.id}>
+                        Invitation sent to {invite.displayName || invite.username} (@
+                        {invite.username}).
+                      </p>
+                    ))}
+                  </>
+                ) : null}
+              </section>
+            ) : null}
+
+            <div className="chat-workspace">
+              <aside className="chat-partner-list" aria-label="Your chats">
+                <h3>Your chats ({chat.partners.length})</h3>
+                {chat.partners.length ? (
+                  chat.partners.map((partner) => (
+                    <button
+                      className={`chat-partner-button ${
+                        chat.partner?.id === partner.id ? "is-selected" : ""
+                      }`}
+                      type="button"
+                      key={partner.id}
+                      aria-pressed={chat.partner?.id === partner.id}
+                      onClick={() => setSelectedPartnerId(partner.id)}
+                    >
+                      <strong>{partner.displayName || partner.username}</strong>
+                      <span>@{partner.username}</span>
+                    </button>
+                  ))
+                ) : (
+                  <p>No chats yet. Search for a username to add one.</p>
+                )}
+              </aside>
+
+              <section className="chat-conversation" aria-label="Conversation">
+                {chat.partner ? (
+                  <>
+                    <h3>{chat.partner.displayName || chat.partner.username}</h3>
+                    <div className="partner-chat-messages" aria-live="polite">
+                      {chat.messages.length ? (
+                        chat.messages.map((message) => (
+                          <article
+                            className={`partner-chat-message ${
+                              message.senderId === currentUser.id ? "is-mine" : ""
+                            }`}
+                            key={message.id}
+                          >
+                            <p>{message.text}</p>
+                            <time dateTime={message.createdAt}>
+                              {formatDate(message.createdAt)}
+                            </time>
+                          </article>
+                        ))
+                      ) : (
+                        <p>No messages yet. Send your first hello.</p>
+                      )}
+                    </div>
+                    <form className="vault-form partner-message-form" onSubmit={handleSendMessage}>
+                      <label>
+                        Message
+                        <textarea
+                          rows={3}
+                          maxLength={5000}
+                          value={chatMessage}
+                          onChange={(event) => setChatMessage(event.target.value)}
+                          placeholder={`Message @${chat.partner.username}...`}
+                          required
+                        />
+                      </label>
                       <button
                         className="primary-button"
-                        type="button"
+                        type="submit"
                         disabled={isActionPending}
-                        onClick={() => handleInviteResponse(invite.id, "accept")}
                       >
-                        Accept
+                        Send message
                       </button>
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        disabled={isActionPending}
-                        onClick={() => handleInviteResponse(invite.id, "decline")}
-                      >
-                        Decline
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            {chat.sentInvites.length ? (
-              <div className="partner-invite-list">
-                <h4>Waiting for a response</h4>
-                {chat.sentInvites.map((invite) => (
-                  <p key={invite.id}>
-                    Invitation sent to {invite.displayName || invite.username} (@{invite.username}).
-                  </p>
-                ))}
-              </div>
-            ) : null}
-          </>
-        ) : null}
-
-        {currentUser && chat.partner ? (
-          <>
-            <div className="partner-chat-messages" aria-live="polite">
-              {chat.messages.length ? (
-                chat.messages.map((message) => (
-                  <article
-                    className={`partner-chat-message ${
-                      message.senderId === currentUser.id ? "is-mine" : ""
-                    }`}
-                    key={message.id}
-                  >
-                    <p>{message.text}</p>
-                    <time dateTime={message.createdAt}>{formatDate(message.createdAt)}</time>
-                  </article>
-                ))
-              ) : (
-                <p>No messages yet. Send your first hello.</p>
-              )}
+                    </form>
+                  </>
+                ) : (
+                  <p>Select a chat or search for a username to start one.</p>
+                )}
+              </section>
             </div>
-            <form className="vault-form partner-message-form" onSubmit={handleSendMessage}>
-              <label>
-                Message
-                <textarea
-                  rows={3}
-                  maxLength={5000}
-                  value={chatMessage}
-                  onChange={(event) => setChatMessage(event.target.value)}
-                  placeholder="Write a message..."
-                  required
-                />
-              </label>
-              <button className="primary-button" type="submit" disabled={isActionPending}>
-                Send message
-              </button>
-            </form>
           </>
         ) : null}
 
