@@ -1,6 +1,13 @@
 import "dotenv/config";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import bcrypt from "bcryptjs";
@@ -23,7 +30,7 @@ const authRateLimitMax = 10;
 
 mkdirSync(dirname(databasePath), { recursive: true });
 
-const database = existsSync(databasePath)
+let database = existsSync(databasePath)
   ? new SQL.Database(readFileSync(databasePath))
   : new SQL.Database();
 database.run("PRAGMA foreign_keys = ON");
@@ -63,10 +70,23 @@ function prepare(sql) {
       return rows;
     },
     run(...parameters) {
-      database.run(sql, parameters);
-      const changes = database.getRowsModified();
-      persistDatabase();
-      return { changes };
+      const previousDatabase = database.export();
+      try {
+        database.run(sql, parameters);
+        const changes = database.getRowsModified();
+        persistDatabase();
+        return { changes };
+      } catch (error) {
+        database.close();
+        database = new SQL.Database(previousDatabase);
+        database.run("PRAGMA foreign_keys = ON");
+
+        const temporaryPath = `${databasePath}.tmp`;
+        if (existsSync(temporaryPath)) {
+          unlinkSync(temporaryPath);
+        }
+        throw error;
+      }
     },
   };
 }

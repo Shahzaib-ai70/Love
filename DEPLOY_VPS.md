@@ -78,6 +78,18 @@ environment file:
 sudo systemctl restart love-memories-api
 ```
 
+To replace a forgotten admin password without manually copying a hash or editing the
+environment file, pull the latest code and run this command as root on the VPS:
+
+```bash
+cd /var/www/love-memories-source
+sudo npm run admin:reset
+```
+
+It securely prompts for and confirms a new password, updates only the admin settings in
+`/etc/love-memories-api.env`, and restarts the API service. The username remains
+`SHAHZAIBKS`; admin credentials remain separate from memory account credentials.
+
 ## 5. Publish Build Files
 
 For the existing `testingpro.site` VPS, the active Nginx configuration uses
