@@ -113,6 +113,20 @@ test("SQL auth, private memories, import idempotence, and admin permissions work
   const health = await fetch(`${baseUrl}/api/health`).then((response) => response.json());
   assert.deepEqual(health, { status: "ok", storage: "sqlite" });
 
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const failedSignIn = await apiRequest("/api/auth/signin", {
+      method: "POST",
+      body: { username: "missing-user", password: "wrong-password-123" },
+    });
+    assert.equal(failedSignIn.status, 401);
+  }
+
+  const rateLimitedSignIn = await apiRequest("/api/auth/signin", {
+    method: "POST",
+    body: { username: "missing-user", password: "wrong-password-123" },
+  });
+  assert.equal(rateLimitedSignIn.status, 429);
+
   const adminSignup = await apiRequest("/api/auth/signup", {
     method: "POST",
     body: {

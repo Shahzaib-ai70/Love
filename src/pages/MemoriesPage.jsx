@@ -1,16 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  createPartnerInvite,
   createVaultAccount,
   deleteUserMemory,
   getMemoryStorageMode,
   getCurrentVaultUser,
-  getPartnerChat,
   getUserMemories,
   importLocalMemories,
-  respondToPartnerInvite,
   saveUserMemory,
-  sendPartnerMessage,
   signInVaultAccount,
   signOutVaultAccount,
 } from "../memoryVaultApi";
@@ -42,17 +38,6 @@ function MemoriesPage() {
   const [mode, setMode] = useState("signin");
   const [currentUser, setCurrentUser] = useState(null);
   const [memories, setMemories] = useState([]);
-  const [chat, setChat] = useState({
-    partner: null,
-    receivedInvites: [],
-    sentInvites: [],
-    messages: [],
-  });
-  const [chatUsername, setChatUsername] = useState("");
-  const [chatMessage, setChatMessage] = useState("");
-  const [chatStatus, setChatStatus] = useState("");
-  const [isLoadingChat, setIsLoadingChat] = useState(false);
-  const [isChatActionPending, setIsChatActionPending] = useState(false);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [authError, setAuthError] = useState("");
   const [saveError, setSaveError] = useState("");
@@ -94,108 +79,6 @@ function MemoriesPage() {
   useEffect(() => {
     void loadCurrentUser();
   }, []);
-
-  useEffect(() => {
-    if (!currentUser) {
-      setChat({
-        partner: null,
-        receivedInvites: [],
-        sentInvites: [],
-        messages: [],
-      });
-      return undefined;
-    }
-
-    let active = true;
-    const refreshChat = async () => {
-      try {
-        const chatState = await getPartnerChat();
-        if (active) {
-          setChat(chatState);
-          setChatStatus("");
-        }
-      } catch (error) {
-        if (active) {
-          setChatStatus(error instanceof Error ? error.message : "Could not load partner chat.");
-        }
-      } finally {
-        if (active) {
-          setIsLoadingChat(false);
-        }
-      }
-    };
-
-    setIsLoadingChat(true);
-    void refreshChat();
-    const refreshTimer = window.setInterval(() => {
-      void refreshChat();
-    }, 5000);
-
-    return () => {
-      active = false;
-      window.clearInterval(refreshTimer);
-    };
-  }, [currentUser]);
-
-  const refreshChat = async () => {
-    try {
-      setChat(await getPartnerChat());
-      setChatStatus("");
-    } catch (error) {
-      setChatStatus(error instanceof Error ? error.message : "Could not refresh partner chat.");
-    }
-  };
-
-  const handleCreatePartnerInvite = async (event) => {
-    event.preventDefault();
-    setIsChatActionPending(true);
-    setChatStatus("");
-
-    try {
-      await createPartnerInvite(chatUsername.trim());
-      setChatUsername("");
-      setChatStatus("Invitation sent. Chat will open when they accept.");
-      await refreshChat();
-    } catch (error) {
-      setChatStatus(error instanceof Error ? error.message : "Could not send invitation.");
-    } finally {
-      setIsChatActionPending(false);
-    }
-  };
-
-  const handlePartnerInvite = async (inviteId, response) => {
-    setIsChatActionPending(true);
-    setChatStatus("");
-
-    try {
-      await respondToPartnerInvite(inviteId, response);
-      await refreshChat();
-    } catch (error) {
-      setChatStatus(error instanceof Error ? error.message : "Could not update invitation.");
-    } finally {
-      setIsChatActionPending(false);
-    }
-  };
-
-  const handleSendChatMessage = async (event) => {
-    event.preventDefault();
-    if (!chatMessage.trim()) {
-      return;
-    }
-
-    setIsChatActionPending(true);
-    setChatStatus("");
-
-    try {
-      await sendPartnerMessage(chatMessage);
-      setChatMessage("");
-      await refreshChat();
-    } catch (error) {
-      setChatStatus(error instanceof Error ? error.message : "Could not send message.");
-    } finally {
-      setIsChatActionPending(false);
-    }
-  };
 
   const memoryCountLabel = useMemo(() => {
     if (isLoadingUser) {
@@ -571,122 +454,6 @@ function MemoriesPage() {
               Log out
             </button>
           </div>
-
-          <article className="memory-letter-card partner-chat-card">
-            <p className="section-tag">Partner chat</p>
-            <h3>
-              {chat.partner
-                ? `Chat with ${chat.partner.displayName || chat.partner.username}`
-                : "Connect with your partner"}
-            </h3>
-
-            {isLoadingChat ? <p>Loading partner chat...</p> : null}
-
-            {!chat.partner ? (
-              <>
-                <p>
-                  Share usernames and send an invitation. Chat becomes available after the other
-                  person accepts.
-                </p>
-                <form className="vault-form partner-invite-form" onSubmit={handleCreatePartnerInvite}>
-                  <label>
-                    Partner username
-                    <input
-                      type="text"
-                      value={chatUsername}
-                      required
-                      onChange={(event) => setChatUsername(event.target.value)}
-                      placeholder="Enter their username"
-                    />
-                  </label>
-                  <button className="primary-button" type="submit" disabled={isChatActionPending}>
-                    Send chat invitation
-                  </button>
-                </form>
-
-                {chat.receivedInvites.length ? (
-                  <div className="partner-invite-list">
-                    <h4>Invitations for you</h4>
-                    {chat.receivedInvites.map((invite) => (
-                      <div className="partner-invite-row" key={invite.id}>
-                        <p>
-                          <strong>{invite.displayName || invite.username}</strong> (@{invite.username})
-                          {" "}wants to chat.
-                        </p>
-                        <div>
-                          <button
-                            className="primary-button"
-                            type="button"
-                            disabled={isChatActionPending}
-                            onClick={() => handlePartnerInvite(invite.id, "accept")}
-                          >
-                            Accept
-                          </button>
-                          <button
-                            className="secondary-button"
-                            type="button"
-                            disabled={isChatActionPending}
-                            onClick={() => handlePartnerInvite(invite.id, "decline")}
-                          >
-                            Decline
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-
-                {chat.sentInvites.length ? (
-                  <div className="partner-invite-list">
-                    <h4>Waiting for a response</h4>
-                    {chat.sentInvites.map((invite) => (
-                      <p key={invite.id}>
-                        Invitation sent to {invite.displayName || invite.username} (@
-                        {invite.username}).
-                      </p>
-                    ))}
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <div className="partner-chat-messages" aria-live="polite">
-                  {chat.messages.length ? (
-                    chat.messages.map((message) => (
-                      <article
-                        className={`partner-chat-message ${
-                          message.senderId === currentUser.id ? "is-mine" : ""
-                        }`}
-                        key={message.id}
-                      >
-                        <p>{message.text}</p>
-                        <time dateTime={message.createdAt}>{formatDate(message.createdAt)}</time>
-                      </article>
-                    ))
-                  ) : (
-                    <p>No messages yet. Send your first hello.</p>
-                  )}
-                </div>
-                <form className="vault-form partner-message-form" onSubmit={handleSendChatMessage}>
-                  <label>
-                    Message
-                    <textarea
-                      rows={3}
-                      maxLength={5000}
-                      value={chatMessage}
-                      onChange={(event) => setChatMessage(event.target.value)}
-                      placeholder="Write a message..."
-                      required
-                    />
-                  </label>
-                  <button className="primary-button" type="submit" disabled={isChatActionPending}>
-                    Send message
-                  </button>
-                </form>
-              </>
-            )}
-            {chatStatus ? <p className="copy-status" role="status">{chatStatus}</p> : null}
-          </article>
 
           <article className="memory-letter-card">
             <p className="section-tag">Add new memory</p>

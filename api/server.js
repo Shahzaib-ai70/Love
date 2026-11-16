@@ -258,7 +258,7 @@ function requireAdmin(request, response, next) {
 
 function takeAuthAttempt(request, response, next) {
   const now = Date.now();
-  const key = request.ip || request.socket.remoteAddress || "unknown";
+  const key = `${request.ip || request.socket.remoteAddress || "unknown"}:${request.path}`;
   const attempt = authAttempts.get(key);
 
   if (attempt && attempt.resetAt > now && attempt.count >= authRateLimitMax) {
@@ -266,11 +266,20 @@ function takeAuthAttempt(request, response, next) {
     return sendError(response, 429, "Too many sign-in attempts. Please wait and try again.");
   }
 
-  if (!attempt || attempt.resetAt <= now) {
-    authAttempts.set(key, { count: 1, resetAt: now + authRateLimitWindowMs });
-  } else {
-    attempt.count += 1;
-  }
+  response.once("finish", () => {
+    if (response.statusCode === 401) {
+      const currentAttempt = authAttempts.get(key);
+
+      if (!currentAttempt || currentAttempt.resetAt <= Date.now()) {
+        authAttempts.set(key, {
+          count: 1,
+          resetAt: Date.now() + authRateLimitWindowMs,
+        });
+      } else {
+        currentAttempt.count += 1;
+      }
+    }
+  });
 
   if (authAttempts.size > 10000) {
     for (const [attemptKey, value] of authAttempts) {
@@ -284,7 +293,7 @@ function takeAuthAttempt(request, response, next) {
 }
 
 function clearAuthAttempts(request) {
-  const key = request.ip || request.socket.remoteAddress || "unknown";
+  const key = `${request.ip || request.socket.remoteAddress || "unknown"}:${request.path}`;
   authAttempts.delete(key);
 }
 

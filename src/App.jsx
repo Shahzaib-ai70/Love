@@ -7,6 +7,7 @@ import IntroPage from "./pages/IntroPage";
 import MemoryAdminPage from "./pages/MemoryAdminPage";
 import MemoriesPage from "./pages/MemoriesPage";
 import MessagesPage from "./pages/MessagesPage";
+import PartnerChatPage from "./pages/PartnerChatPage";
 
 const HIDDEN_ADMIN_PATH = "/love-vault-admin-2026";
 
@@ -29,6 +30,7 @@ function SiteLayout() {
           <NavLink to="/home">Home</NavLink>
           <NavLink to="/memories">Memories</NavLink>
           <NavLink to="/messages">Messages</NavLink>
+          <NavLink to="/partner-chat">Partner Chat</NavLink>
           <NavLink to="/heart-maker">Heart Maker</NavLink>
         </nav>
       </header>
@@ -73,6 +75,7 @@ function App() {
         <Route path="/home" element={<HomePage />} />
         <Route path="/memories" element={<MemoriesPage />} />
         <Route path="/messages" element={<MessagesPage />} />
+        <Route path="/partner-chat" element={<PartnerChatPage />} />
         <Route path="/heart-maker" element={<HeartMakerPage />} />
       </Route>
       <Route element={<AdminLayout />}>
