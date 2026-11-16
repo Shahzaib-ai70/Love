@@ -376,7 +376,7 @@ function MemoriesPage() {
       const { importedCount, totalCount } = await importLocalMemories();
       setSaveSuccess(
         totalCount
-          ? `Imported ${importedCount} of ${totalCount} browser memories into your SQL account.`
+          ? `Imported ${importedCount} of ${totalCount} browser memories into your account.`
           : "No browser memories were found for this username on this device."
       );
       await loadCurrentUser();
@@ -393,8 +393,8 @@ function MemoriesPage() {
         <p className="section-tag">Private memories</p>
         <h2>Save your own memory vault</h2>
         <p className="copy-status">
-          {memoryCountLabel} Your account and memories are stored in the site's SQL database and
-          can be accessed from any device.
+          {memoryCountLabel} Your account and memories are securely stored online and can be
+          accessed from any device.
         </p>
       </div>
 
@@ -535,7 +535,7 @@ function MemoriesPage() {
 
             <p className="copy-status">
               {authError ||
-                "Create an account to save memories securely to the site's SQL database."}
+                "Create an account to save your memories securely and open them from any device."}
             </p>
           </article>
 
@@ -544,7 +544,7 @@ function MemoriesPage() {
             <h3>Private vault access</h3>
             <p>
               Your account works on every device. Sign in with the same username and password to
-              see the memories stored in your private SQL account.
+              see the memories saved in your private account.
             </p>
           </article>
         </div>
@@ -761,7 +761,7 @@ function MemoriesPage() {
             <p className="copy-status">
               {saveError ||
                 saveSuccess ||
-                "Saved memories stay in your private SQL account."}
+                "Your saved memories stay private and are available whenever you sign in."}
             </p>
           </article>
 

@@ -1,5 +1,4 @@
 import bcrypt from "bcryptjs";
-import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 
 function readHiddenPassword() {
@@ -52,16 +51,14 @@ if (!stdin.isTTY) {
   process.exit(1);
 }
 
-const terminal = createInterface({ input: stdin, output: stdout });
-
 try {
-  const username = (await terminal.question("Admin username: ")).trim();
+  const username = (process.env.ADMIN_USERNAME || "SHAHZAIBKS").trim();
 
   if (!/^[a-z0-9][a-z0-9._-]{2,31}$/i.test(username)) {
     throw new Error("Use a username with 3-32 letters, numbers, dots, underscores, or hyphens.");
   }
 
-  terminal.close();
+  console.log(`Creating a separate admin password for ${username}.`);
   const password = await readHiddenPassword();
 
   if (password.length < 8 || Buffer.byteLength(password, "utf8") > 72) {
@@ -73,7 +70,6 @@ try {
   console.log(`ADMIN_USERNAME=${username}`);
   console.log(`ADMIN_PASSWORD_HASH=${passwordHash}`);
 } catch (error) {
-  terminal.close();
   console.error(error instanceof Error ? error.message : "Could not configure admin account.");
   process.exitCode = 1;
 }

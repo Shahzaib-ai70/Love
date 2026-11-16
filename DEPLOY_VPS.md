@@ -41,8 +41,8 @@ npm ci
 npm run admin:hash
 ```
 
-Enter `SHAHZAIBKS` when asked for the admin username, then choose a separate admin
-password. Copy the two printed `ADMIN_...` lines into the API environment file:
+The script uses `SHAHZAIBKS` as the admin username and prompts for a separate password
+without displaying it. Copy the two printed `ADMIN_...` lines into the API environment file:
 
 ```bash
 sudo mkdir -p /var/lib/love-memories
