@@ -169,6 +169,12 @@ function PartnerChatPage() {
       <article className="memory-letter-card partner-chat-card">
         {isLoadingUser || isLoadingChat ? <p>Loading partner chat...</p> : null}
 
+        {currentUser ? (
+          <p className="copy-status">
+            Using your Memories account: @{currentUser.username}. Chat needs no separate account.
+          </p>
+        ) : null}
+
         {!isLoadingUser && !currentUser ? (
           <p>
             Create or sign in to a memory account to connect with your partner.{" "}

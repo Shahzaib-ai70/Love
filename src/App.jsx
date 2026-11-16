@@ -30,7 +30,7 @@ function SiteLayout() {
           <NavLink to="/home">Home</NavLink>
           <NavLink to="/memories">Memories</NavLink>
           <NavLink to="/messages">Messages</NavLink>
-          <NavLink to="/partner-chat">Partner Chat</NavLink>
+          <NavLink to="/partner-chat">Chat</NavLink>
           <NavLink to="/heart-maker">Heart Maker</NavLink>
         </nav>
       </header>
