@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { createInterface } from "node:readline";
+import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 
 function readHiddenPassword() {
@@ -45,6 +45,11 @@ function readHiddenPassword() {
 
     stdin.on("data", handleInput);
   });
+}
+
+if (!stdin.isTTY) {
+  console.error("Run this command directly in an interactive VPS terminal.");
+  process.exit(1);
 }
 
 const terminal = createInterface({ input: stdin, output: stdout });
