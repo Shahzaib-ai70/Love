@@ -825,9 +825,37 @@ input {
   font-size: 0.75rem;
 }
 
+.chat-conversation .partner-chat-message,
+.chat-conversation .partner-chat-message p {
+  color: #3d2037;
+}
+
+.chat-conversation .partner-chat-message.is-mine,
+.chat-conversation .partner-chat-message.is-mine p {
+  color: #42152f;
+}
+
+.chat-conversation .partner-chat-message time {
+  color: #69495f;
+}
+
 .partner-message-form {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
+}
+
+.chat-conversation .partner-message-form label {
+  color: #432238;
+}
+
+.chat-conversation .partner-message-form textarea {
+  border-color: #d7adc3;
+  color: #38172f;
+  background: #fffafd;
+}
+
+.chat-conversation .partner-message-form textarea::placeholder {
+  color: #765d70;
 }
 
 .partner-message-form textarea {
