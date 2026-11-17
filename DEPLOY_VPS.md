@@ -78,6 +78,43 @@ environment file:
 sudo systemctl restart love-memories-api
 ```
 
+### Fix an API 502 or stopped service
+
+The API port must match the `proxy_pass` port in the active HTTPS Nginx server block
+for the site. Do not assume it is `3001`; existing VPS configurations may use a
+different port. Find the active `/api/` proxy and compare it with the API's `PORT`:
+
+```bash
+sudo nginx -T 2>/dev/null | grep -n -B 12 -A 12 'server_name testingpro.site'
+sudo grep '^PORT=' /etc/love-memories-api.env
+```
+
+Set `PORT` to the port used by the active HTTPS `/api/` proxy, then restart and
+check the API on that same port:
+
+```bash
+sudo sed -i 's/^PORT=.*/PORT=<matching-port>/' /etc/love-memories-api.env
+sudo systemctl restart love-memories-api
+sudo systemctl status love-memories-api --no-pager -l
+curl -fsS http://127.0.0.1:<matching-port>/api/health
+```
+
+The health check should return `{"status":"ok","storage":"sqlite"}`. If it does,
+verify and reload Nginx, then check the public API:
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+curl -i https://testingpro.site/api/health
+```
+
+If the local health check fails, inspect the service logs before changing anything
+else:
+
+```bash
+sudo journalctl -u love-memories-api -n 100 --no-pager
+```
+
 To replace a forgotten admin password without manually copying a hash or editing the
 environment file, pull the latest code and run this command as root on the VPS:
 

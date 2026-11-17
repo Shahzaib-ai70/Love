@@ -19,6 +19,15 @@ async function request(path, { method = "GET", body } = {}) {
     : await response.text();
 
   if (!response.ok) {
+    const isHtmlResponse =
+      contentType.includes("text/html") ||
+      (typeof payload === "string" && /^\s*(?:<!doctype html|<html\b)/i.test(payload));
+    if (isHtmlResponse) {
+      throw new Error(
+        `The server returned an unexpected response (HTTP ${response.status}). Please try again shortly.`
+      );
+    }
+
     const message =
       typeof payload === "string" ? payload : payload?.error || payload?.message;
     throw new Error(message || `Request failed with status ${response.status}.`);
