@@ -457,11 +457,15 @@ function MemoriesPage() {
 
           <article className="memory-letter-card">
             <p className="section-tag">Add new memory</p>
-            <h3>Upload or paste your memories</h3>
+            <h3>Save a special message</h3>
+            <p>
+              In WhatsApp, copy only the message you want to keep, then paste it below.
+              You can save one message or a few together without importing the whole chat.
+            </p>
 
             <form className="vault-form" onSubmit={handleSaveMemory}>
               <label>
-                Memory title
+                Give this memory a title
                 <input
                   type="text"
                   value={memoryForm.title}
@@ -471,14 +475,15 @@ function MemoriesPage() {
                       title: event.target.value,
                     }))
                   }
-                  placeholder="Our first long message"
+                  placeholder="The message that made me smile"
                 />
               </label>
 
               <label>
-                Paste message or note
+                Paste your selected WhatsApp message
                 <textarea
                   rows={5}
+                  maxLength={50000}
                   value={memoryForm.text}
                   onChange={(event) =>
                     setMemoryForm((currentForm) => ({
@@ -486,9 +491,13 @@ function MemoriesPage() {
                       text: event.target.value,
                     }))
                   }
-                  placeholder="Paste your loving message here..."
+                  placeholder="Long-press the message in WhatsApp, tap Copy, then paste it here..."
                 />
               </label>
+
+              <p className="copy-status">
+                Only the text you paste here is saved. Add a title so it’s easy to find later.
+              </p>
 
               <label>
                 Paste image or video URL
