@@ -173,6 +173,42 @@ function MemoriesPage() {
     }
   };
 
+  const handlePasteImage = async (event) => {
+    const imageItem = Array.from(event.clipboardData?.items || []).find(
+      (item) => item.kind === "file" && item.type.startsWith("image/")
+    );
+    const file = imageItem?.getAsFile();
+
+    if (!file) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(file.type)) {
+      setSaveError("Pasted images must be PNG, JPEG, WebP, or GIF.");
+      return;
+    }
+
+    if (file.size > maxUploadSizeMb * 1024 * 1024) {
+      setSaveError(`Keep uploads under ${maxUploadSizeMb} MB for reliable saving.`);
+      return;
+    }
+
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setSaveError("");
+      setMemoryForm((currentForm) => ({
+        ...currentForm,
+        mediaData: dataUrl,
+        mediaType: "image",
+        mediaFileName: file.name || "pasted-image",
+      }));
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Could not read the pasted image.");
+    }
+  };
+
   const handleSaveMemory = async (event) => {
     event.preventDefault();
 
@@ -463,7 +499,11 @@ function MemoriesPage() {
               You can save one message or a few together without importing the whole chat.
             </p>
 
-            <form className="vault-form" onSubmit={handleSaveMemory}>
+            <form
+              className="vault-form"
+              onSubmit={handleSaveMemory}
+              onPaste={handlePasteImage}
+            >
               <label>
                 Give this memory a title
                 <input
@@ -480,7 +520,7 @@ function MemoriesPage() {
               </label>
 
               <label>
-                Paste your selected WhatsApp message
+                Paste your selected WhatsApp message or image
                 <textarea
                   rows={5}
                   maxLength={50000}
@@ -491,7 +531,7 @@ function MemoriesPage() {
                       text: event.target.value,
                     }))
                   }
-                  placeholder="Long-press the message in WhatsApp, tap Copy, then paste it here..."
+                  placeholder="Copy a message or image in WhatsApp, then paste it here..."
                 />
               </label>
 
@@ -525,7 +565,7 @@ function MemoriesPage() {
               </label>
 
               <p className="copy-status">
-                {`Uploads are stored with your account. Keep files under ${maxUploadSizeMb} MB.`}{" "}
+                {`Paste an image into the message box or select a file. Uploads are stored with your account and must be under ${maxUploadSizeMb} MB.`}{" "}
                 Selected file: {memoryForm.mediaFileName || "none"}
               </p>
 
