@@ -529,33 +529,34 @@ function PartnerChatPage() {
                             </button>
                           </div>
                         ) : null}
-                        <label>
-                          Message
+                        <div className="chat-input-bar">
+                          <button
+                            className="chat-input-icon"
+                            type="button"
+                            aria-label="Choose an emoji"
+                            aria-expanded={isEmojiPickerOpen}
+                            onClick={() => setIsEmojiPickerOpen((open) => !open)}
+                          >
+                            😊
+                          </button>
                           <textarea
                             ref={messageInputRef}
-                            rows={3}
+                            rows={2}
                             maxLength={5000}
                             value={chatMessage}
                             onChange={(event) => setChatMessage(event.target.value)}
                             onPaste={handlePasteMessage}
                             placeholder={`Message @${chat.partner.username}...`}
+                            aria-label="Message"
                           />
-                        </label>
-                        <div className="chat-composer-tools">
                           <button
-                            className="chat-tool-button"
-                            type="button"
-                            aria-expanded={isEmojiPickerOpen}
-                            onClick={() => setIsEmojiPickerOpen((open) => !open)}
-                          >
-                            😊 Emoji
-                          </button>
-                          <button
-                            className="chat-tool-button"
+                            className="chat-input-icon"
                             type="button"
                             onClick={() => mediaInputRef.current?.click()}
+                            aria-label="Attach an image or video"
+                            title="Attach an image or video"
                           >
-                            ＋ Media
+                            📎
                           </button>
                           <input
                             ref={mediaInputRef}
@@ -565,16 +566,17 @@ function PartnerChatPage() {
                             onChange={handleMediaChange}
                             aria-label="Choose an image or video to send"
                           />
-                          <span>Copy text with Copy, or paste an image/video here</span>
+                          <button
+                            className="primary-button chat-send-button"
+                            type="submit"
+                            disabled={isActionPending || (!chatMessage.trim() && !chatMedia)}
+                            aria-label={isActionPending ? "Sending message" : "Send message"}
+                            title={isActionPending ? "Sending..." : "Send message"}
+                          >
+                            {isActionPending ? "…" : "➤"}
+                          </button>
                         </div>
                       </div>
-                      <button
-                        className="primary-button"
-                        type="submit"
-                        disabled={isActionPending || (!chatMessage.trim() && !chatMedia)}
-                      >
-                        {isActionPending ? "Sending..." : "Send"}
-                      </button>
                     </form>
                   </>
                 ) : (
