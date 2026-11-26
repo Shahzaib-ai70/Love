@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   createPartnerInvite,
@@ -17,6 +17,18 @@ const emptyChat = {
   messages: [],
 };
 
+const chatEmojis = ["❤️", "🥰", "😍", "😘", "😊", "😂", "😭", "🫶", "💕", "🌹"];
+const chatMediaTypes = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "video/mp4",
+  "video/webm",
+  "video/ogg",
+]);
+const maxChatMediaSize = 15 * 1024 * 1024;
+
 function formatDate(dateString) {
   return new Date(dateString).toLocaleString();
 }
@@ -28,12 +40,16 @@ function PartnerChatPage() {
   const [usernameQuery, setUsernameQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [chatMessage, setChatMessage] = useState("");
+  const [chatMedia, setChatMedia] = useState(null);
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [status, setStatus] = useState("");
   const [searchStatus, setSearchStatus] = useState("");
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isLoadingChat, setIsLoadingChat] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [isActionPending, setIsActionPending] = useState(false);
+  const messageInputRef = useRef(null);
+  const mediaInputRef = useRef(null);
 
   useEffect(() => {
     let active = true;
@@ -170,7 +186,7 @@ function PartnerChatPage() {
 
   const handleSendMessage = async (event) => {
     event.preventDefault();
-    if (!chatMessage.trim() || !chat.partner) {
+    if ((!chatMessage.trim() && !chatMedia) || !chat.partner) {
       return;
     }
 
@@ -178,13 +194,92 @@ function PartnerChatPage() {
     setStatus("");
 
     try {
-      await sendPartnerMessage(chat.partner.id, chatMessage);
+      await sendPartnerMessage(chat.partner.id, {
+        text: chatMessage,
+        mediaData: chatMedia?.data || "",
+        mediaFileName: chatMedia?.fileName || "",
+        mediaType: chatMedia?.type || "text",
+      });
       setChatMessage("");
+      setChatMedia(null);
+      setIsEmojiPickerOpen(false);
       await refreshChat(chat.partner.id);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not send message.");
     } finally {
       setIsActionPending(false);
+    }
+  };
+
+  const attachChatMedia = async (file) => {
+    if (!chatMediaTypes.has(file.type)) {
+      setStatus("Choose a PNG, JPEG, WebP, GIF, MP4, WebM, or OGG file.");
+      return;
+    }
+
+    if (file.size > maxChatMediaSize) {
+      setStatus("Keep chat attachments under 15 MB.");
+      return;
+    }
+
+    try {
+      const data = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Could not read the selected attachment."));
+        reader.readAsDataURL(file);
+      });
+      setChatMedia({
+        data,
+        fileName: file.name || "chat-attachment",
+        type: file.type.startsWith("video/") ? "video" : "image",
+      });
+      setStatus("");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not read the attachment.");
+    }
+  };
+
+  const handleMediaChange = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      void attachChatMedia(file);
+    }
+    event.target.value = "";
+  };
+
+  const handlePasteMessage = (event) => {
+    const mediaItem = Array.from(event.clipboardData?.items || []).find(
+      (item) => item.kind === "file" && chatMediaTypes.has(item.type)
+    );
+    const file = mediaItem?.getAsFile();
+
+    if (file) {
+      event.preventDefault();
+      void attachChatMedia(file);
+    }
+  };
+
+  const insertEmoji = (emoji) => {
+    const input = messageInputRef.current;
+    const cursor = input?.selectionStart ?? chatMessage.length;
+    const nextMessage = `${chatMessage.slice(0, cursor)}${emoji}${chatMessage.slice(cursor)}`;
+    setChatMessage(nextMessage);
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(cursor + emoji.length, cursor + emoji.length);
+    });
+  };
+
+  const handleCopyMessage = async (text) => {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Copy is unavailable in this browser.");
+      }
+      await navigator.clipboard.writeText(text);
+      setStatus("Message copied.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not copy the message.");
     }
   };
 
@@ -360,7 +455,35 @@ function PartnerChatPage() {
                             }`}
                             key={message.id}
                           >
-                            <p>{message.text}</p>
+                            {message.mediaUrl ? (
+                              message.mediaType === "video" ? (
+                                <video
+                                  className="partner-chat-media"
+                                  controls
+                                  preload="metadata"
+                                  src={message.mediaUrl}
+                                >
+                                  Your browser cannot play this video.
+                                </video>
+                              ) : (
+                                <img
+                                  className="partner-chat-media"
+                                  src={message.mediaUrl}
+                                  alt={message.mediaFileName || "Image shared in chat"}
+                                  loading="lazy"
+                                />
+                              )
+                            ) : null}
+                            {message.text ? <p>{message.text}</p> : null}
+                            {message.text ? (
+                              <button
+                                className="chat-copy-button"
+                                type="button"
+                                onClick={() => void handleCopyMessage(message.text)}
+                              >
+                                Copy
+                              </button>
+                            ) : null}
                             <time dateTime={message.createdAt}>
                               {formatDate(message.createdAt)}
                             </time>
@@ -371,23 +494,86 @@ function PartnerChatPage() {
                       )}
                     </div>
                     <form className="vault-form partner-message-form" onSubmit={handleSendMessage}>
-                      <label>
-                        Message
-                        <textarea
-                          rows={3}
-                          maxLength={5000}
-                          value={chatMessage}
-                          onChange={(event) => setChatMessage(event.target.value)}
-                          placeholder={`Message @${chat.partner.username}...`}
-                          required
-                        />
-                      </label>
+                      <div className="chat-composer">
+                        {isEmojiPickerOpen ? (
+                          <div className="chat-emoji-picker" role="group" aria-label="Choose an emoji">
+                            {chatEmojis.map((emoji) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => insertEmoji(emoji)}
+                                aria-label={`Insert ${emoji}`}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                        {chatMedia ? (
+                          <div className="chat-attachment-preview">
+                            {chatMedia.type === "video" ? (
+                              <video src={chatMedia.data} muted preload="metadata" />
+                            ) : (
+                              <img src={chatMedia.data} alt="Attachment preview" />
+                            )}
+                            <span>
+                              {chatMedia.type === "video" ? "Video ready" : "Image ready"}:{" "}
+                              {chatMedia.fileName}
+                            </span>
+                            <button
+                              type="button"
+                              className="chat-copy-button"
+                              onClick={() => setChatMedia(null)}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ) : null}
+                        <label>
+                          Message
+                          <textarea
+                            ref={messageInputRef}
+                            rows={3}
+                            maxLength={5000}
+                            value={chatMessage}
+                            onChange={(event) => setChatMessage(event.target.value)}
+                            onPaste={handlePasteMessage}
+                            placeholder={`Message @${chat.partner.username}...`}
+                          />
+                        </label>
+                        <div className="chat-composer-tools">
+                          <button
+                            className="chat-tool-button"
+                            type="button"
+                            aria-expanded={isEmojiPickerOpen}
+                            onClick={() => setIsEmojiPickerOpen((open) => !open)}
+                          >
+                            😊 Emoji
+                          </button>
+                          <button
+                            className="chat-tool-button"
+                            type="button"
+                            onClick={() => mediaInputRef.current?.click()}
+                          >
+                            ＋ Media
+                          </button>
+                          <input
+                            ref={mediaInputRef}
+                            className="chat-media-input"
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/ogg"
+                            onChange={handleMediaChange}
+                            aria-label="Choose an image or video to send"
+                          />
+                          <span>Copy text with Copy, or paste an image/video here</span>
+                        </div>
+                      </div>
                       <button
                         className="primary-button"
                         type="submit"
-                        disabled={isActionPending}
+                        disabled={isActionPending || (!chatMessage.trim() && !chatMedia)}
                       >
-                        Send message
+                        {isActionPending ? "Sending..." : "Send"}
                       </button>
                     </form>
                   </>

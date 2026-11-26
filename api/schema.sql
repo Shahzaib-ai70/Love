@@ -78,6 +78,9 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   sender_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   text TEXT NOT NULL,
+  media_data TEXT NOT NULL DEFAULT '',
+  media_file_name TEXT NOT NULL DEFAULT '',
+  media_type TEXT NOT NULL DEFAULT 'text',
   created_at TEXT NOT NULL,
   CHECK (sender_id <> recipient_id)
 );

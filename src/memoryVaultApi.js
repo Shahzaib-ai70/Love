@@ -138,10 +138,10 @@ export async function respondToPartnerInvite(inviteId, response) {
   });
 }
 
-export async function sendPartnerMessage(recipientId, text) {
+export async function sendPartnerMessage(recipientId, messagePayload) {
   const { message } = await request("/chat/messages", {
     method: "POST",
-    body: { recipientId, text },
+    body: { recipientId, ...messagePayload },
   });
   return message;
 }

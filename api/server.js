@@ -25,6 +25,8 @@ const sessionCookieName = "love_memory_session";
 const adminSessionCookieName = "love_admin_session";
 const sessionDurationMs = 30 * 24 * 60 * 60 * 1000;
 const maxMediaDataLength = 21 * 1024 * 1024;
+const chatMediaDataPattern =
+  /^data:(image\/(?:png|jpeg|webp|gif)|video\/(?:mp4|webm|ogg));base64,([A-Za-z0-9+/]+={0,2})$/i;
 const authRateLimitWindowMs = 15 * 60 * 1000;
 const authRateLimitMax = 10;
 
@@ -85,6 +87,38 @@ function migratePartnerLinks() {
 }
 
 migratePartnerLinks();
+
+function migrateChatMessageMedia() {
+  const tableInfo = database.exec("PRAGMA table_info(chat_messages)")[0];
+  if (!tableInfo) {
+    throw new Error("Chat message schema is missing.");
+  }
+
+  const existingColumns = new Set(tableInfo.values.map((column) => column[1]));
+  const missingColumns = [
+    ["media_data", "TEXT NOT NULL DEFAULT ''"],
+    ["media_file_name", "TEXT NOT NULL DEFAULT ''"],
+    ["media_type", "TEXT NOT NULL DEFAULT 'text'"],
+  ].filter(([columnName]) => !existingColumns.has(columnName));
+
+  if (!missingColumns.length) {
+    return;
+  }
+
+  database.run("BEGIN IMMEDIATE");
+  try {
+    for (const [columnName, columnType] of missingColumns) {
+      database.run(`ALTER TABLE chat_messages ADD COLUMN ${columnName} ${columnType}`);
+    }
+    database.run("COMMIT");
+    persistDatabase();
+  } catch (error) {
+    database.run("ROLLBACK");
+    throw error;
+  }
+}
+
+migrateChatMessageMedia();
 
 function prepare(sql) {
   return {
@@ -621,7 +655,9 @@ app.get("/api/chat", requireAuth, (request, response) => {
   const messages = partner
     ? prepare(
         `SELECT id, sender_id AS senderId, recipient_id AS recipientId,
-                text, created_at AS createdAt
+                text, media_file_name AS mediaFileName, media_type AS mediaType,
+                CASE WHEN media_data <> '' THEN 1 ELSE 0 END AS hasMedia,
+                created_at AS createdAt
          FROM chat_messages
          WHERE (sender_id = ? AND recipient_id = ?)
             OR (sender_id = ? AND recipient_id = ?)
@@ -630,6 +666,12 @@ app.get("/api/chat", requireAuth, (request, response) => {
       )
         .all(request.user.id, partner.id, partner.id, request.user.id)
         .reverse()
+        .map(({ hasMedia, ...message }) => ({
+          ...message,
+          mediaUrl: hasMedia
+            ? `/api/chat/messages/${encodeURIComponent(message.id)}/media`
+            : "",
+        }))
     : [];
 
   response.json({ partners, partner, receivedInvites, sentInvites, messages });
@@ -741,13 +783,66 @@ app.post("/api/chat/invites/:inviteId/decline", requireAuth, (request, response)
   response.status(204).end();
 });
 
+app.get("/api/chat/messages/:messageId/media", requireAuth, (request, response) => {
+  const storedMessage = prepare(
+    `SELECT media_data AS mediaData
+     FROM chat_messages
+     WHERE id = ? AND (sender_id = ? OR recipient_id = ?)`
+  ).get(request.params.messageId, request.user.id, request.user.id);
+
+  if (!storedMessage?.mediaData) {
+    return sendError(response, 404, "Chat attachment not found.");
+  }
+
+  const mediaMatch = chatMediaDataPattern.exec(storedMessage.mediaData);
+  if (!mediaMatch) {
+    return sendError(response, 500, "The stored chat attachment could not be read.");
+  }
+
+  const media = Buffer.from(mediaMatch[2], "base64");
+  response.setHeader("Content-Type", mediaMatch[1].toLowerCase());
+  response.setHeader("Content-Length", media.length);
+  response.setHeader("Cache-Control", "private, no-store");
+  return response.send(media);
+});
+
 app.post("/api/chat/messages", requireAuth, (request, response, next) => {
   const text = typeof request.body?.text === "string" ? request.body.text.trim() : "";
   const recipientId =
     typeof request.body?.recipientId === "string" ? request.body.recipientId : "";
+  const mediaData = request.body?.mediaData ?? "";
+  const mediaFileName = request.body?.mediaFileName ?? "";
+  const mediaType = request.body?.mediaType ?? (mediaData ? "" : "text");
+  const mediaMatch =
+    typeof mediaData === "string" ? chatMediaDataPattern.exec(mediaData) : null;
 
-  if (!text || text.length > 5000) {
+  if (typeof request.body?.text !== "undefined" && typeof request.body.text !== "string") {
+    return sendError(response, 400, "Message text must be plain text.");
+  }
+
+  if (text.length > 5000) {
     return sendError(response, 400, "Write a message of 1-5,000 characters.");
+  }
+
+  if (!text && !mediaData) {
+    return sendError(response, 400, "Write a message or attach an image or video.");
+  }
+
+  if (
+    typeof mediaData !== "string" ||
+    mediaData.length > maxMediaDataLength ||
+    typeof mediaFileName !== "string" ||
+    mediaFileName.length > 255 ||
+    !["text", "image", "video"].includes(mediaType)
+  ) {
+    return sendError(response, 400, "Chat media details are invalid.");
+  }
+
+  if (
+    (mediaData && (!mediaMatch || !mediaMatch[1].toLowerCase().startsWith(`${mediaType}/`))) ||
+    (!mediaData && (mediaType !== "text" || mediaFileName))
+  ) {
+    return sendError(response, 400, "Attach a supported image or video file.");
   }
 
   const partner = selectPartner.get(request.user.id, recipientId);
@@ -762,14 +857,40 @@ app.post("/api/chat/messages", requireAuth, (request, response, next) => {
       senderId: request.user.id,
       recipientId: partner.id,
       text,
+      mediaData,
+      mediaFileName,
+      mediaType,
       createdAt: new Date().toISOString(),
     };
     prepare(
-      `INSERT INTO chat_messages (id, sender_id, recipient_id, text, created_at)
-       VALUES (?, ?, ?, ?, ?)`
-    ).run(message.id, message.senderId, message.recipientId, message.text, message.createdAt);
+      `INSERT INTO chat_messages (
+         id, sender_id, recipient_id, text, media_data, media_file_name, media_type, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      message.id,
+      message.senderId,
+      message.recipientId,
+      message.text,
+      message.mediaData,
+      message.mediaFileName,
+      message.mediaType,
+      message.createdAt
+    );
 
-    return response.status(201).json({ message });
+    return response.status(201).json({
+      message: {
+        id: message.id,
+        senderId: message.senderId,
+        recipientId: message.recipientId,
+        text: message.text,
+        mediaFileName: message.mediaFileName,
+        mediaType: message.mediaType,
+        createdAt: message.createdAt,
+        mediaUrl: mediaData
+          ? `/api/chat/messages/${encodeURIComponent(message.id)}/media`
+          : "",
+      },
+    });
   } catch (error) {
     return next(error);
   }

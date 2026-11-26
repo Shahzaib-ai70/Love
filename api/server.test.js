@@ -136,6 +136,20 @@ before(async () => {
      VALUES ('legacy-one-id', 'legacy-two-id', '2024-01-01'),
             ('legacy-two-id', 'legacy-one-id', '2024-01-01')`
   );
+  legacyDatabase.run(
+    `CREATE TABLE chat_messages (
+       id TEXT PRIMARY KEY,
+       sender_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+       recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+       text TEXT NOT NULL,
+       created_at TEXT NOT NULL,
+       CHECK (sender_id <> recipient_id)
+     )`
+  );
+  legacyDatabase.run(
+    `INSERT INTO chat_messages (id, sender_id, recipient_id, text, created_at)
+     VALUES ('legacy-message', 'legacy-one-id', 'legacy-two-id', 'A saved hello', '2024-01-01')`
+  );
   await writeFile(join(temporaryDirectory, "test.sqlite"), Buffer.from(legacyDatabase.export()));
   legacyDatabase.close();
   await startApi();
@@ -158,6 +172,9 @@ test("SQL auth, private memories, import idempotence, and admin permissions work
   const migratedChat = await apiRequest("/api/chat", { cookie: migratedAccount.cookie });
   assert.equal(migratedChat.payload.partners.length, 1);
   assert.equal(migratedChat.payload.partner.username, "legacytwo");
+  assert.equal(migratedChat.payload.messages[0].text, "A saved hello");
+  assert.equal(migratedChat.payload.messages[0].mediaUrl, "");
+  assert.equal(migratedChat.payload.messages[0].mediaType, "text");
 
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const failedSignIn = await apiRequest("/api/auth/signin", {
@@ -363,15 +380,76 @@ test("SQL auth, private memories, import idempotence, and admin permissions work
   const messageToSecondPartner = await apiRequest("/api/chat/messages", {
     method: "POST",
     cookie: adminSignup.cookie,
-    body: { recipientId: unpairedSignup.payload.user.id, text: "Hello, second partner." },
+    body: { recipientId: unpairedSignup.payload.user.id, text: "Hello, second partner. ❤️" },
   });
   assert.equal(messageToSecondPartner.status, 201);
+  const invalidChatMedia = await apiRequest("/api/chat/messages", {
+    method: "POST",
+    cookie: adminSignup.cookie,
+    body: {
+      recipientId: unpairedSignup.payload.user.id,
+      text: "",
+      mediaData: "data:text/html;base64,SGVsbG8=",
+      mediaFileName: "unsafe.html",
+      mediaType: "image",
+    },
+  });
+  assert.equal(invalidChatMedia.status, 400);
+  const mediaChatMessage = await apiRequest("/api/chat/messages", {
+    method: "POST",
+    cookie: adminSignup.cookie,
+    body: {
+      recipientId: unpairedSignup.payload.user.id,
+      text: "",
+      mediaData:
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
+      mediaFileName: "surprise.png",
+      mediaType: "image",
+    },
+  });
+  assert.equal(mediaChatMessage.status, 201);
+  assert.equal(mediaChatMessage.payload.message.text, "");
+  assert.equal(mediaChatMessage.payload.message.mediaType, "image");
+  assert.equal(mediaChatMessage.payload.message.mediaFileName, "surprise.png");
+  assert.ok(mediaChatMessage.payload.message.mediaUrl);
+  assert.equal("mediaData" in mediaChatMessage.payload.message, false);
   const secondPartnerChat = await apiRequest(
     `/api/chat?partnerId=${encodeURIComponent(adminSignup.payload.user.id)}`,
     { cookie: unpairedSignup.cookie }
   );
-  assert.equal(secondPartnerChat.payload.messages.length, 1);
-  assert.equal(secondPartnerChat.payload.messages[0].text, "Hello, second partner.");
+  assert.equal(secondPartnerChat.payload.messages.length, 2);
+  assert.equal(secondPartnerChat.payload.messages[0].text, "Hello, second partner. ❤️");
+  assert.equal(secondPartnerChat.payload.messages[1].text, "");
+  assert.equal(secondPartnerChat.payload.messages[1].mediaFileName, "surprise.png");
+  assert.equal("mediaData" in secondPartnerChat.payload.messages[1], false);
+  const receivedMediaResponse = await fetch(
+    `${baseUrl}${secondPartnerChat.payload.messages[1].mediaUrl}`,
+    { headers: { Cookie: unpairedSignup.cookie } }
+  );
+  assert.equal(receivedMediaResponse.status, 200);
+  assert.equal(receivedMediaResponse.headers.get("content-type"), "image/png");
+  assert.deepEqual(
+    Buffer.from(await receivedMediaResponse.arrayBuffer()),
+    Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
+      "base64"
+    )
+  );
+  const unauthorizedMediaResponse = await fetch(
+    `${baseUrl}${secondPartnerChat.payload.messages[1].mediaUrl}`,
+    { headers: { Cookie: guestSignup.cookie } }
+  );
+  assert.equal(unauthorizedMediaResponse.status, 404);
+  const senderSecondPartnerChat = await apiRequest(
+    `/api/chat?partnerId=${encodeURIComponent(unpairedSignup.payload.user.id)}`,
+    { cookie: adminSignup.cookie }
+  );
+  assert.equal(senderSecondPartnerChat.payload.messages[1].mediaFileName, "surprise.png");
+  const senderMediaResponse = await fetch(
+    `${baseUrl}${senderSecondPartnerChat.payload.messages[1].mediaUrl}`,
+    { headers: { Cookie: adminSignup.cookie } }
+  );
+  assert.equal(senderMediaResponse.status, 200);
 
   const usernameSearch = await apiRequest("/api/chat/search?username=admin", {
     cookie: unpairedSignup.cookie,
@@ -416,7 +494,7 @@ test("SQL auth, private memories, import idempotence, and admin permissions work
   );
   assert.equal(
     adminUsers.payload.users.find((user) => user.username === "admin").messageCount,
-    2
+    3
   );
   assert.equal("password" in adminUsers.payload.users[0], false);
   assert.equal("passwordHash" in adminUsers.payload.users[0], false);
@@ -430,7 +508,7 @@ test("SQL auth, private memories, import idempotence, and admin permissions work
   assert.ok(
     adminUserDetails.payload.memories.some((memory) => memory.text === "Private content")
   );
-  assert.equal(adminUserDetails.payload.messages.length, 2);
+  assert.equal(adminUserDetails.payload.messages.length, 3);
   assert.equal(adminUserDetails.payload.messages[0].senderUsername, "guest");
   assert.ok(adminUserDetails.payload.invites.every((invite) => invite.status === "accepted"));
   assert.deepEqual(
