@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { getCurrentVaultUser, signOutVaultAccount } from "../memoryVaultApi";
 import { useLove } from "../LoveContext";
 
 const features = [
@@ -33,6 +35,52 @@ const features = [
 
 function HomePage() {
   const { namesLabel } = useLove();
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isLoadingAccount, setIsLoadingAccount] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [accountStatus, setAccountStatus] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    getCurrentVaultUser()
+      .then((user) => {
+        if (active) {
+          setCurrentUser(user);
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setAccountStatus(
+            error instanceof Error ? error.message : "Could not check the memory account."
+          );
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoadingAccount(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    setAccountStatus("");
+
+    try {
+      await signOutVaultAccount();
+      setCurrentUser(null);
+      setAccountStatus("You are signed out. Someone else can now sign in or create an account.");
+    } catch (error) {
+      setAccountStatus(error instanceof Error ? error.message : "Could not sign out.");
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   return (
     <div className="home-page">
@@ -106,6 +154,40 @@ function HomePage() {
             </span>
           </div>
         </div>
+      </section>
+
+      <section className="home-account-card" aria-label="Memory account">
+        <div>
+          <p className="home-eyebrow">Memory account</p>
+          {isLoadingAccount ? (
+            <p className="home-account-description">Checking sign-in status...</p>
+          ) : currentUser ? (
+            <p className="home-account-description">
+              Signed in as <strong>@{currentUser.username}</strong>
+            </p>
+          ) : (
+            <p className="home-account-description">
+              {accountStatus || "No memory account is signed in on this device."}
+            </p>
+          )}
+        </div>
+        {currentUser ? (
+          <button
+            className="secondary-button home-account-button"
+            type="button"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+          >
+            {isLoggingOut ? "Signing out..." : "Log out"}
+          </button>
+        ) : (
+          <Link className="home-account-link" to="/memories">
+            Sign in or create account
+          </Link>
+        )}
+        {currentUser && accountStatus ? (
+          <p className="home-account-status" role="status">{accountStatus}</p>
+        ) : null}
       </section>
 
       <section className="home-discover" aria-labelledby="home-discover-title">
